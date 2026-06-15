@@ -1,0 +1,13 @@
+{
+  "name": "agentos",
+  "private": true,
+  "workspaces": ["web", "engine"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=web\" \"npm run dev --workspace=engine\"",
+    "build": "npm run build --workspace=web && npm run build --workspace=engine",
+    "install:all": "npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
