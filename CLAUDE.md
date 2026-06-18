@@ -55,7 +55,14 @@ Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifi
   - intent_tag vocab: Pricing, Troll, Support, Lead, Spam, Hostile, Angry, Shipping, General
 - `web/app/api/insights/route.ts` — two-step pipeline: SQL generation → result interpretation
   - Returns plain-English answer from actual query results (not just SQL explanation)
+  - `render_as` field: "text" | "table" | "bar_chart" | "line_chart" — set by LLM based on user intent
   - CSV export button appears on every assistant message that has data rows
+  - All prompts use AgentOS branding (not OmniForge)
+- `web/components/InsightRenderer.tsx` — renders table, bar chart, or line chart based on `render_as`
+  - Table: HTML table with truncated cells
+  - Bar chart: Recharts BarChart, orange bars, dark theme
+  - Line chart: Recharts LineChart, cyan line, dark theme
+  - Auto-detects x-axis (first string column) and y-axis (first numeric column)
 - `web/app/api/cron/route.ts` — cron jobs persisted to Supabase `cron_jobs` table
   - Scheduled Reports tab reads from Supabase (not Redis) so survives Docker restarts
   - DELETE removes from both BullMQ and Supabase
