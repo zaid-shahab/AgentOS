@@ -43,14 +43,25 @@ Meta keys (`META_APP_SECRET`, `META_VERIFY_TOKEN`, `META_PAGE_ACCESS_TOKEN`) are
 Run migrations in order in the Supabase SQL Editor:
 1. `supabase/migrations/001_init.sql` — creates all tables, pgvector index, `run_readonly_query` function
 2. `supabase/migrations/002_seed_demo_data.sql` — seeds 15 fake interactions + 3 leads for testing Insights tab (dev/demo only)
+3. `supabase/migrations/003_cron_jobs.sql` — creates `cron_jobs` table for persistent scheduled report storage
 
 Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifications`
 
-## Prompt tuning status (Dev 2)
-- `web/app/api/build/route.ts` SYSTEM_PROMPT tuned and tested ✅
-- Unconditional actions correctly skip Decision node
-- Multi-condition prompts produce correct fan-out graphs
-- intent_tag vocab: Pricing, Troll, Support, Lead, Spam, Hostile, Angry, Shipping, General
+## Prompt tuning status (Dev 2) — all complete ✅
+- `web/app/api/build/route.ts` — SYSTEM_PROMPT tuned and tested
+  - Unconditional actions correctly skip Decision node (Trigger → Action directly)
+  - Multi-condition prompts produce correct fan-out graphs
+  - Pre-flight classifier (Claude Haiku) rejects non-Meta prompts before hitting generateObject
+  - intent_tag vocab: Pricing, Troll, Support, Lead, Spam, Hostile, Angry, Shipping, General
+- `web/app/api/insights/route.ts` — two-step pipeline: SQL generation → result interpretation
+  - Returns plain-English answer from actual query results (not just SQL explanation)
+  - CSV export button appears on every assistant message that has data rows
+- `web/app/api/cron/route.ts` — cron jobs persisted to Supabase `cron_jobs` table
+  - Scheduled Reports tab reads from Supabase (not Redis) so survives Docker restarts
+  - DELETE removes from both BullMQ and Supabase
+- `web/app/api/knowledge/route.ts` — saves text chunks to `knowledge_base` table
+  - No OpenAI dependency — plain text storage, executor retrieves with simple SELECT
+  - Success feedback shown in UI after save
 
 ## Key files — read these first
 | File | What it does |
