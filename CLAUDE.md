@@ -41,13 +41,38 @@ Required keys before running:
 
 Meta keys (`META_APP_SECRET`, `META_VERIFY_TOKEN`, `META_PAGE_ACCESS_TOKEN`) are only needed for webhook testing — app runs fine without them.
 
+## Webhook tunnel (local development)
+Use localtunnel with a fixed subdomain to expose the engine to Meta:
+```bash
+npx localtunnel --port 4000 --subdomain agentos-eocean-bilal-pk
+```
+Webhook URL to register in Meta dashboard: `https://agentos-eocean-bilal-pk.loca.lt/webhook/meta`
+Register once under Meta App → Instagram (or Messenger) → Settings → Webhooks → Add Callback URL.
+
+## Testing the webhook locally
+A signed fake-event test script is at `engine/test-webhook.js`:
+```bash
+cd engine && node test-webhook.js
+```
+Sends a properly HMAC-signed fake Instagram DM to `localhost:4000`. Expected terminal output:
+```
+[webhook] event received — platform:instagram_dm sender:test-user-123 text:"..."
+[sentiment] intent:Pricing sentiment:Positive
+[executor] action_taken:send_dm   ← or no_config if no flow deployed yet
+[db] interaction logged
+```
+
+## accountId is hardcoded "demo" everywhere
+`engine/src/routes/webhook.ts` passes `"demo"` as accountId for all incoming Meta events (not `entry.id`). This matches the hardcoded `accountId = "demo"` used by all web API routes. Do not change this for the hackathon.
+
 ## Database setup
 Run migrations in order in the Supabase SQL Editor:
 1. `supabase/migrations/001_init.sql` — creates all tables, pgvector index, `run_readonly_query` function
 2. `supabase/migrations/002_seed_demo_data.sql` — seeds 15 fake interactions + 3 leads for testing Insights tab (dev/demo only)
 3. `supabase/migrations/003_cron_jobs.sql` — creates `cron_jobs` table for persistent scheduled report storage
+4. `supabase/migrations/004_kb_source.sql` — adds `source` column to `knowledge_base` (tracks filename for uploaded docs)
 
-Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifications`
+Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifications`, `cron_jobs`
 
 ## Prompt tuning status (Dev 2) — all complete ✅
 - `web/app/api/build/route.ts` — SYSTEM_PROMPT tuned and tested
@@ -68,9 +93,13 @@ Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifi
 - `web/app/api/cron/route.ts` — cron jobs persisted to Supabase `cron_jobs` table
   - Scheduled Reports tab reads from Supabase (not Redis) so survives Docker restarts
   - DELETE removes from both BullMQ and Supabase
-- `web/app/api/knowledge/route.ts` — saves text chunks to `knowledge_base` table
+- `web/app/api/knowledge/route.ts` — saves text to `knowledge_base` table (two modes)
+  - **File upload mode**: multipart/form-data with `file` field — parses PDF (`pdf-parse`), DOCX (`mammoth`), TXT/MD/CSV
+  - **Text paste mode**: JSON `{ text }` — existing plain text chunking
   - No OpenAI dependency — plain text storage, executor retrieves with simple SELECT
-  - Success feedback shown in UI after save
+  - Stores `source` (filename) alongside each chunk
+  - DELETE endpoint to remove individual chunks by id
+  - Success/error feedback shown in UI after save or upload
 
 ## UI design system & interaction model (post-redesign)
 - **Design tokens & all `.of-*` / `.lp-*` styles** live in `web/app/globals.css` (ported from the omniforge prototype). Node accents are CSS vars: trigger=cyan, decision=purple, action=orange, schedule=green.
@@ -153,6 +182,8 @@ Meta event → POST /webhook/meta (engine :4000)
 1. Home tab → product landing; click "Build an agent" → Orchestrator
 2. Orchestrator (chat) → type/speak: "Watch IG comments. If someone asks for price, DM them. Hide toxic comments." → AgentOS replies conversationally → say "execute" → nodes animate onto canvas
 3. Click a node → "Describe the change": e.g. "send an email instead of a DM" → node regenerates in place. Toggle back to Chat — history is preserved.
-4. DM the test Instagram account live → bot replies in real time
-5. Insights tab → type: "How many leads today?" → instant answer
-6. Insights tab → type: "Send me a summary every morning at 9 AM" → cron badge appears
+4. Click **Deploy** → config saved to Supabase under `account_id = "demo"`
+5. DM the test Instagram account live → bot replies in real time
+6. Knowledge Base tab → upload `brand-faq.txt` (or any PDF/DOCX) → chunks stored in Supabase → bot references it when answering DMs with `rag_query` action
+7. Insights tab → type: "How many leads today?" → instant answer
+8. Insights tab → type: "Send me a summary every morning at 9 AM" → cron badge appears

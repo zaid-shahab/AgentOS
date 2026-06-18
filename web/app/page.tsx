@@ -146,6 +146,10 @@ export default function CommandCenter() {
   const [kbText, setKbText] = useState("");
   const [kbSaving, setKbSaving] = useState(false);
   const [kbSaved, setKbSaved] = useState(false);
+  const [kbFile, setKbFile] = useState<File | null>(null);
+  const [kbUploading, setKbUploading] = useState(false);
+  const [kbUploadMsg, setKbUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const kbFileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const voiceTargetRef = useRef<"architect" | "insights" | null>(null);
@@ -378,6 +382,29 @@ export default function CommandCenter() {
       if (data.success) setKbSaved(true);
     } finally {
       setKbSaving(false);
+    }
+  }
+
+  async function handleKbUpload() {
+    if (!kbFile || kbUploading) return;
+    setKbUploading(true);
+    setKbUploadMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", kbFile);
+      const res = await fetch("/api/knowledge", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.success) {
+        setKbUploadMsg({ ok: true, text: `Parsed ${data.chunks} chunks from "${data.filename}"` });
+        setKbFile(null);
+        if (kbFileRef.current) kbFileRef.current.value = "";
+      } else {
+        setKbUploadMsg({ ok: false, text: data.error ?? "Upload failed." });
+      }
+    } catch {
+      setKbUploadMsg({ ok: false, text: "Network error. Please try again." });
+    } finally {
+      setKbUploading(false);
     }
   }
 
@@ -916,6 +943,62 @@ export default function CommandCenter() {
               </div>
               <div className="of-kb-wrap">
                 <div className="of-kb-panel">
+
+                  {/* ── Upload document ─────────────────────────────────── */}
+                  <div className="of-kb-section-lbl">Upload document</div>
+                  <div
+                    className="of-kb-dropzone"
+                    onClick={() => kbFileRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const f = e.dataTransfer.files[0];
+                      if (f) { setKbFile(f); setKbUploadMsg(null); }
+                    }}
+                  >
+                    <Icon name="upload" />
+                    <span>
+                      {kbFile
+                        ? kbFile.name
+                        : "Click or drag a file here — PDF, DOCX, or TXT"}
+                    </span>
+                    {kbFile && (
+                      <span style={{ fontSize: 11, opacity: 0.5 }}>
+                        {(kbFile.size / 1024).toFixed(1)} KB
+                      </span>
+                    )}
+                    <input
+                      ref={kbFileRef}
+                      type="file"
+                      accept=".pdf,.docx,.txt,.md,.csv"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null;
+                        setKbFile(f);
+                        setKbUploadMsg(null);
+                      }}
+                    />
+                  </div>
+                  <div className="of-kb-row">
+                    <button
+                      className="of-send"
+                      style={{ width: "auto", padding: "0 22px", height: 42, borderRadius: 12 }}
+                      onClick={handleKbUpload}
+                      disabled={kbUploading || !kbFile}
+                    >
+                      {kbUploading ? "Parsing…" : "Upload & Parse"}
+                    </button>
+                    {kbUploadMsg && (
+                      <span className="of-kb-saved" style={{ color: kbUploadMsg.ok ? "var(--good)" : "var(--bad)" }}>
+                        <Icon name={kbUploadMsg.ok ? "check" : "x"} /> {kbUploadMsg.text}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="of-kb-divider" />
+
+                  {/* ── Paste text ──────────────────────────────────────── */}
+                  <div className="of-kb-section-lbl">Or paste text</div>
                   <textarea
                     className="of-kb-textarea"
                     placeholder={"Pricing:\n  Pro plan: $49/mo\n  Basic plan: $19/mo\n\nReturn policy: 30-day no-questions-asked refund.\n\nSupport email: support@yourbrand.com"}
@@ -937,6 +1020,7 @@ export default function CommandCenter() {
                       </span>
                     )}
                   </div>
+
                 </div>
               </div>
             </div>

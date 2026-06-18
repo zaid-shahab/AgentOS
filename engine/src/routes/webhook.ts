@@ -42,7 +42,7 @@ router.post("/meta", async (req: Request, res: Response) => {
 
   for (const entry of body.entry ?? []) {
     for (const event of [...(entry.messaging ?? []), ...(entry.changes ?? [])]) {
-      await processEvent(event, entry.id);
+      await processEvent(event, "demo");
     }
   }
 });
@@ -57,8 +57,11 @@ async function processEvent(event: any, accountId: string) {
 
   if (!text) return;
 
+  console.log(`[webhook] event received — platform:${platform} sender:${senderId} text:"${text}"`);
+
   // 1. Analyse sentiment + intent
   const { sentiment, intent_tag } = await analyzeIntent(text);
+  console.log(`[sentiment] intent:${intent_tag} sentiment:${sentiment}`);
 
   // 2. Load active config for this account
   const { data } = await supabase
@@ -69,10 +72,14 @@ async function processEvent(event: any, accountId: string) {
     .limit(1)
     .single();
 
+  if (!data?.config) console.log(`[executor] no config found for account:${accountId}`);
+
   // 3. Execute
   const action_taken = data?.config
     ? await executeConfig(data.config, { text, senderId, platform, sentiment, intent_tag, accountId })
     : "no_config";
+
+  console.log(`[executor] action_taken:${action_taken}`);
 
   // 4. Log to Data Lake
   await supabase.from("interactions").insert({
@@ -84,6 +91,7 @@ async function processEvent(event: any, accountId: string) {
     intent_tag,
     action_taken,
   });
+  console.log("[db] interaction logged");
 }
 
 export default router;
