@@ -4,6 +4,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { CronJobSchema } from "@/lib/schema";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
+import { supabase } from "@/lib/supabase";
 
 const connection = new IORedis(process.env.REDIS_URL || "redis://localhost:6379", {
   maxRetriesPerRequest: null,
@@ -27,7 +28,18 @@ export async function POST(req: NextRequest) {
     prompt,
   });
 
-  // Add repeatable job to BullMQ
+  // Save to Supabase for persistent display
+  await supabase.from("cron_jobs").insert({
+    account_id:      accountId,
+    name:            cronJob.name,
+    cron_expression: cronJob.cron_expression,
+    report_type:     cronJob.report_type,
+    delivery:        cronJob.delivery,
+    delivery_target: cronJob.delivery_target ?? null,
+    description:     cronJob.description,
+  });
+
+  // Also add to BullMQ for actual execution
   await reportQueue.add(
     cronJob.name,
     { cronJob, accountId },
@@ -42,13 +54,24 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const accountId = req.nextUrl.searchParams.get("accountId") || "demo";
-  const repeatableJobs = await reportQueue.getRepeatableJobs();
-  const jobs = repeatableJobs.filter((j) => j.id?.startsWith(accountId));
-  return NextResponse.json({ jobs });
+  const { data, error } = await supabase
+    .from("cron_jobs")
+    .select("*")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ jobs: data });
 }
 
 export async function DELETE(req: NextRequest) {
   const { jobId } = await req.json();
-  await reportQueue.removeRepeatableByKey(jobId);
+
+  // Remove from BullMQ
+  await reportQueue.removeRepeatableByKey(jobId).catch(() => {});
+
+  // Remove from Supabase
+  await supabase.from("cron_jobs").delete().eq("id", jobId);
+
   return NextResponse.json({ success: true });
 }

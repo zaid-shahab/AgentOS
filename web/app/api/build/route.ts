@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateObject } from "ai";
+import { generateObject, generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { AutomationConfigSchema } from "@/lib/schema";
 import { configToGraph } from "@/lib/configToGraph";
 import { supabase } from "@/lib/supabase";
 
 const SYSTEM_PROMPT = `You are OmniForge's Generative Engine.
-Convert the user's plain-English description into a strict JSON automation config for Meta platforms.
+Convert the user's plain-English description into a strict JSON automation config for Meta platforms (Instagram and Messenger only).
 
 Rules:
 - platform must be one of: instagram_comment, instagram_dm, messenger_dm
@@ -31,16 +31,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "prompt is required" }, { status: 400 });
   }
 
-  const { object: config } = await generateObject({
-    model: anthropic("claude-sonnet-4-6"),
-    schema: AutomationConfigSchema,
-    system: SYSTEM_PROMPT,
+  // Step 1 — guard: reject prompts unrelated to Meta platforms
+  const { text: check } = await generateText({
+    model: anthropic("claude-haiku-4-5-20251001"),
+    system: `You are a classifier. Reply with only YES or NO.
+Is the following request about automating Instagram comments, Instagram DMs, or Messenger DMs?`,
     prompt,
   });
 
+  if (check.trim().toUpperCase().startsWith("NO")) {
+    return NextResponse.json(
+      { error: "I can only build agents for Instagram and Messenger. Try: \"Watch IG comments. If someone asks for price, DM them.\"" },
+      { status: 422 }
+    );
+  }
+
+  // Step 2 — generate the config
+  let config;
+  try {
+    const result = await generateObject({
+      model: anthropic("claude-sonnet-4-6"),
+      schema: AutomationConfigSchema,
+      system: SYSTEM_PROMPT,
+      prompt,
+    });
+    config = result.object;
+  } catch {
+    return NextResponse.json(
+      { error: "Could not generate a valid agent from that prompt. Please be more specific about the platform and actions." },
+      { status: 422 }
+    );
+  }
+
   const graph = configToGraph(config);
 
-  // Persist the config to Supabase so the engine can look it up
   await supabase.from("automation_configs").upsert({
     account_id: accountId,
     config,

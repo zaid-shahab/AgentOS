@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openai } from "@ai-sdk/openai";
-import { embed } from "ai";
 import { supabase } from "@/lib/supabase";
 
 // Chunk text into ~500-char pieces with overlap
@@ -19,19 +17,22 @@ export async function POST(req: NextRequest) {
   if (!text?.trim()) return NextResponse.json({ error: "text required" }, { status: 400 });
 
   const chunks = chunk(text);
-
-  const rows = await Promise.all(
-    chunks.map(async (content) => {
-      const { embedding } = await embed({
-        model: openai.embedding("text-embedding-3-small"),
-        value: content,
-      });
-      return { account_id: accountId, content, embedding };
-    })
-  );
+  const rows = chunks.map((content) => ({ account_id: accountId, content }));
 
   const { error } = await supabase.from("knowledge_base").insert(rows);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true, chunks: rows.length });
+}
+
+export async function GET(req: NextRequest) {
+  const accountId = req.nextUrl.searchParams.get("accountId") || "demo";
+  const { data, error } = await supabase
+    .from("knowledge_base")
+    .select("id, content, created_at")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ chunks: data });
 }

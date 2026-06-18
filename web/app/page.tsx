@@ -4,8 +4,22 @@ import { useState, useRef, useEffect } from "react";
 import NodeCanvas from "@/components/NodeCanvas";
 import type { Graph, GraphNode, GraphEdge } from "@/lib/schema";
 
+function exportCSV(data: Record<string, unknown>[], filename = "insights-export.csv") {
+  if (!data?.length) return;
+  const headers = Object.keys(data[0]);
+  const rows = data.map((row) => headers.map((h) => JSON.stringify(row[h] ?? "")).join(","));
+  const csv = [headers.join(","), ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 type Tab = "architect" | "insights" | "knowledge" | "crons";
-type Message = { role: "user" | "assistant"; content: string; cron?: string };
+type Message = { role: "user" | "assistant"; content: string; cron?: string; data?: Record<string, unknown>[] };
 
 export default function CommandCenter() {
   const [tab, setTab] = useState<Tab>("architect");
@@ -13,6 +27,7 @@ export default function CommandCenter() {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: "Ask me anything about your interactions — leads, sentiment, top issues, or schedule a daily briefing." },
@@ -20,6 +35,7 @@ export default function CommandCenter() {
   const [insightInput, setInsightInput] = useState("");
   const [kbText, setKbText] = useState("");
   const [kbSaving, setKbSaving] = useState(false);
+  const [kbSaved, setKbSaved] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -28,18 +44,23 @@ export default function CommandCenter() {
   async function handleBuild() {
     if (!prompt.trim() || loading) return;
     setLoading(true);
+    setBuildError(null);
     try {
       const res = await fetch("/api/build", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
       });
-      const graph: Graph = await res.json();
-      setNodes(graph.nodes);
-      setEdges(graph.edges);
+      const data = await res.json();
+      if (!res.ok) {
+        setBuildError(data.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      setNodes(data.nodes);
+      setEdges(data.edges);
       setPrompt("");
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setBuildError("Network error. Check your connection.");
     } finally {
       setLoading(false);
     }
@@ -106,7 +127,7 @@ export default function CommandCenter() {
         body: JSON.stringify({ question: q }),
       });
       const data = await res.json();
-      setMessages((m) => [...m, { role: "assistant", content: data.answer ?? data.error }]);
+      setMessages((m) => [...m, { role: "assistant", content: data.answer ?? data.error, data: data.data ?? [] }]);
     } catch {
       setMessages((m) => [...m, { role: "assistant", content: "Failed to query. Check your connection." }]);
     }
@@ -116,12 +137,15 @@ export default function CommandCenter() {
   async function handleSaveKb() {
     if (!kbText.trim()) return;
     setKbSaving(true);
+    setKbSaved(false);
     try {
-      await fetch("/api/knowledge", {
+      const res = await fetch("/api/knowledge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: kbText }),
       });
+      const data = await res.json();
+      if (data.success) setKbSaved(true);
     } finally {
       setKbSaving(false);
     }
@@ -164,6 +188,11 @@ export default function CommandCenter() {
           {tab === "architect" && (
             <>
               <NodeCanvas nodes={nodes} edges={edges} />
+              {buildError && (
+                <div style={{ padding: "10px 24px", background: "rgba(239,68,68,0.1)", borderTop: "1px solid rgba(239,68,68,0.2)", fontSize: 13, color: "var(--red)" }}>
+                  {buildError}
+                </div>
+              )}
               <div className="of-command-bar">
                 <textarea
                   className="of-command-input"
@@ -194,6 +223,14 @@ export default function CommandCenter() {
                       {msg.content}
                       {msg.cron && (
                         <div className="of-cron-badge">⏱ Scheduled · {msg.cron}</div>
+                      )}
+                      {msg.role === "assistant" && msg.data && msg.data.length > 0 && (
+                        <button
+                          onClick={() => exportCSV(msg.data!)}
+                          style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, fontSize: 11, padding: "4px 10px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "var(--muted)", cursor: "pointer" }}
+                        >
+                          ↓ Export CSV ({msg.data.length} rows)
+                        </button>
                       )}
                     </div>
                   </div>
@@ -237,9 +274,16 @@ export default function CommandCenter() {
                 value={kbText}
                 onChange={(e) => setKbText(e.target.value)}
               />
-              <button className="of-btn of-btn-primary" style={{ alignSelf: "flex-start" }} onClick={handleSaveKb} disabled={kbSaving}>
-                {kbSaving ? "Saving…" : "Save & Embed"}
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <button className="of-btn of-btn-primary" style={{ alignSelf: "flex-start" }} onClick={handleSaveKb} disabled={kbSaving}>
+                  {kbSaving ? "Saving…" : "Save & Embed"}
+                </button>
+                {kbSaved && (
+                  <span style={{ fontSize: 13, color: "var(--green)" }}>
+                    ✓ Saved successfully
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
@@ -279,12 +323,13 @@ function CronsPanel() {
         </p>
       )}
       {jobs.map((job) => (
-        <div key={job.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10 }}>
+        <div key={job.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10 }}>
           <div>
             <p style={{ fontSize: 13, fontWeight: 600 }}>{job.name}</p>
-            <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{job.cron} · next: {job.next ? new Date(job.next).toLocaleString() : "—"}</p>
+            <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{job.cron_expression} · {job.delivery} · {job.description}</p>
+            <div className="of-cron-badge" style={{ marginTop: 6 }}>⏱ {job.cron_expression}</div>
           </div>
-          <button className="of-btn of-btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => deleteJob(job.key)}>
+          <button className="of-btn of-btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => deleteJob(job.id)}>
             Remove
           </button>
         </div>
