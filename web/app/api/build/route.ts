@@ -5,7 +5,7 @@ import { AutomationConfigSchema } from "@/lib/schema";
 import { configToGraph } from "@/lib/configToGraph";
 import { supabase } from "@/lib/supabase";
 
-const SYSTEM_PROMPT = `You are OmniForge's Generative Engine.
+const SYSTEM_PROMPT = `You are AgentOS's Generative Engine.
 Convert the user's plain-English description into a strict JSON automation config for Meta platforms (Instagram and Messenger only).
 
 Rules:

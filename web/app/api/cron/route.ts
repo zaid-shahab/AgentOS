@@ -12,7 +12,7 @@ const connection = new IORedis(process.env.REDIS_URL || "redis://localhost:6379"
 
 const reportQueue = new Queue("reports", { connection });
 
-const SYSTEM_PROMPT = `You are OmniForge's Cron Scheduler.
+const SYSTEM_PROMPT = `You are AgentOS's Cron Scheduler.
 Convert the user's natural-language schedule request into a structured cron job config.
 cron_expression must be standard 5-part cron syntax (e.g., "0 9 * * *" for 9 AM daily).
 report_type must be one of: hot_leads, sentiment_summary, interaction_count, custom.

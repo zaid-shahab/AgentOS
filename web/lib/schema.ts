@@ -92,6 +92,7 @@ export type CronJob = z.infer<typeof CronJobSchema>;
 export const InsightQuerySchema = z.object({
   sql: z.string(),
   explanation: z.string(),
+  render_as: z.enum(["text", "table", "bar_chart", "line_chart"]),
 });
 
 export type InsightQuery = z.infer<typeof InsightQuerySchema>;

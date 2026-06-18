@@ -25,19 +25,28 @@ Table: leads
   created_at    timestamptz
 `;
 
-const SQL_PROMPT = `You are a Text-to-SQL engine for OmniForge.
+const SQL_PROMPT = `You are a Text-to-SQL engine for AgentOS.
 Convert the user's natural-language analytics question into a read-only SQL query against the schema below.
 Always filter by account_id = '{{ACCOUNT_ID}}'.
 Never use DROP, DELETE, UPDATE, INSERT, or any mutation.
 Return only SELECT queries.
 
+Also set render_as based on what the user wants:
+- "table" — user asks for a list, table, rows, or details with multiple columns
+- "bar_chart" — user asks for a bar chart, graph, or comparison between categories (e.g. sentiment counts, intent breakdown)
+- "line_chart" — user asks for a trend, over time, timeline
+- "text" — user asks a simple question expecting a number or sentence
+
 ${DB_SCHEMA}`;
 
-const ANSWER_PROMPT = `You are an analytics assistant for OmniForge.
+const ANSWER_PROMPT = `You are an analytics assistant for AgentOS.
 The user asked a question. You ran a SQL query and got results.
-Answer the user's question in one or two plain-English sentences using the actual data.
-Be specific — include the actual numbers from the results.
-If the result is empty, say "No data found for that query."`;
+Rules:
+- Write ONLY plain text. No markdown, no backticks, no pipe characters, no bullet points.
+- If render_as is "table" or "bar_chart" or "line_chart": write one short sentence summarising the key finding (e.g. "Here are your 15 interactions from the past 4 days."). The UI will render the full data visually — do not repeat the data in text.
+- If render_as is "text": answer in one or two sentences with the actual numbers.
+- If the result is empty, say "No data found for that query."
+- Never output a markdown table or code block.`;
 
 export async function POST(req: NextRequest) {
   const { question, accountId = "demo" } = await req.json();
@@ -67,8 +76,8 @@ export async function POST(req: NextRequest) {
   const { text: answer } = await generateText({
     model: anthropic("claude-haiku-4-5-20251001"),
     system: ANSWER_PROMPT,
-    prompt: `User question: "${question}"\n\nSQL results: ${JSON.stringify(data)}`,
+    prompt: `User question: "${question}"\nrender_as: ${insight.render_as}\n\nSQL results: ${JSON.stringify(data)}`,
   });
 
-  return NextResponse.json({ answer, sql: insight.sql, data });
+  return NextResponse.json({ answer, sql: insight.sql, data, render_as: insight.render_as });
 }

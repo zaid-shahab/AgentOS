@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import NodeCanvas from "@/components/NodeCanvas";
+import InsightRenderer from "@/components/InsightRenderer";
 import type { Graph, GraphNode, GraphEdge } from "@/lib/schema";
 
 function exportCSV(data: Record<string, unknown>[], filename = "insights-export.csv") {
@@ -19,7 +20,8 @@ function exportCSV(data: Record<string, unknown>[], filename = "insights-export.
 }
 
 type Tab = "architect" | "insights" | "knowledge" | "crons";
-type Message = { role: "user" | "assistant"; content: string; cron?: string; data?: Record<string, unknown>[] };
+type RenderAs = "text" | "table" | "bar_chart" | "line_chart";
+type Message = { role: "user" | "assistant"; content: string; cron?: string; data?: Record<string, unknown>[]; render_as?: RenderAs };
 
 export default function CommandCenter() {
   const [tab, setTab] = useState<Tab>("architect");
@@ -127,7 +129,7 @@ export default function CommandCenter() {
         body: JSON.stringify({ question: q }),
       });
       const data = await res.json();
-      setMessages((m) => [...m, { role: "assistant", content: data.answer ?? data.error, data: data.data ?? [] }]);
+      setMessages((m) => [...m, { role: "assistant", content: data.answer ?? data.error, data: data.data ?? [], render_as: data.render_as ?? "text" }]);
     } catch {
       setMessages((m) => [...m, { role: "assistant", content: "Failed to query. Check your connection." }]);
     }
@@ -223,6 +225,9 @@ export default function CommandCenter() {
                       {msg.content}
                       {msg.cron && (
                         <div className="of-cron-badge">⏱ Scheduled · {msg.cron}</div>
+                      )}
+                      {msg.role === "assistant" && msg.data && msg.data.length > 0 && msg.render_as && msg.render_as !== "text" && (
+                        <InsightRenderer data={msg.data} render_as={msg.render_as} />
                       )}
                       {msg.role === "assistant" && msg.data && msg.data.length > 0 && (
                         <button
