@@ -18,24 +18,16 @@ export default function InsightRenderer({ data, render_as }: Props) {
   if (render_as === "table") {
     const headers = Object.keys(data[0]);
     return (
-      <div style={{ overflowX: "auto", marginTop: 10 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+      <div className="of-tablewrap" style={{ marginTop: 12 }}>
+        <table className="of-itable">
           <thead>
-            <tr>
-              {headers.map((h) => (
-                <th key={h} style={{ padding: "6px 10px", textAlign: "left", borderBottom: "1px solid var(--border)", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
+            <tr>{headers.map((h) => <th key={h}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {data.map((row, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr key={i}>
                 {headers.map((h) => (
-                  <td key={h} style={{ padding: "7px 10px", color: "var(--text)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {String(row[h] ?? "—")}
-                  </td>
+                  <td key={h}>{String(row[h] ?? "—")}</td>
                 ))}
               </tr>
             ))}
@@ -45,7 +37,6 @@ export default function InsightRenderer({ data, render_as }: Props) {
     );
   }
 
-  // For charts, detect x-axis (first string key) and y-axis (first numeric key)
   const keys = Object.keys(data[0]);
   const xKey = keys.find((k) => typeof data[0][k] === "string") ?? keys[0];
   const yKey = keys.find((k) => typeof data[0][k] === "number") ?? keys[1];
@@ -56,10 +47,19 @@ export default function InsightRenderer({ data, render_as }: Props) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-            <XAxis dataKey={xKey} tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }} />
-            <YAxis tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }} />
-            <Tooltip contentStyle={{ background: "#0f0f18", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }} />
-            <Bar dataKey={yKey} fill="#fb923c" radius={[4, 4, 0, 0]} />
+            <XAxis dataKey={xKey} tick={{ fill: "var(--ink-3)", fontSize: 11 }} />
+            <YAxis tick={{ fill: "var(--ink-3)", fontSize: 11 }} />
+            <Tooltip
+              contentStyle={{
+                background: "#0e0e18",
+                border: "1px solid rgba(255,255,255,0.09)",
+                borderRadius: 10,
+                fontSize: 12,
+                color: "#f4f5fb",
+              }}
+              cursor={{ fill: "rgba(255,122,24,0.08)" }}
+            />
+            <Bar dataKey={yKey} fill="var(--accent)" radius={[6, 6, 2, 2]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -72,10 +72,24 @@ export default function InsightRenderer({ data, render_as }: Props) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-            <XAxis dataKey={xKey} tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }} />
-            <YAxis tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }} />
-            <Tooltip contentStyle={{ background: "#0f0f18", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }} />
-            <Line type="monotone" dataKey={yKey} stroke="#22d3ee" strokeWidth={2} dot={{ fill: "#22d3ee", r: 3 }} />
+            <XAxis dataKey={xKey} tick={{ fill: "var(--ink-3)", fontSize: 11 }} />
+            <YAxis tick={{ fill: "var(--ink-3)", fontSize: 11 }} />
+            <Tooltip
+              contentStyle={{
+                background: "#0e0e18",
+                border: "1px solid rgba(255,255,255,0.09)",
+                borderRadius: 10,
+                fontSize: 12,
+                color: "#f4f5fb",
+              }}
+            />
+            <Line
+              type="monotone"
+              dataKey={yKey}
+              stroke="var(--c-trigger)"
+              strokeWidth={2.2}
+              dot={{ fill: "var(--c-trigger)", r: 3 }}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>

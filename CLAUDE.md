@@ -3,6 +3,8 @@
 ## What this project is
 A generative AI orchestrator for Meta platforms (Instagram + Messenger). Users describe an agent in plain English or voice, and the platform compiles it into a live JSON state machine, visualises it as a node graph, and deploys it to a Meta webhook. It also has a conversational Insight Engine (Text-to-SQL) and scheduled reports via BullMQ/Redis.
 
+The Command Center UI uses the **AgentOS dark "omniforge" design system** (Space Grotesk / Manrope / JetBrains Mono, glass panels, neon node accents, dot-matrix canvas). The shell is a 68px icon rail + main column + 376px right panel. Tabs: **Home** (marketing landing), **Orchestrator** (chat → build → canvas), **Database / Insights**, **Knowledge Base**, **Scheduled Reports**.
+
 ## Monorepo structure
 ```
 AgentOS/
@@ -70,15 +72,35 @@ Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifi
   - No OpenAI dependency — plain text storage, executor retrieves with simple SELECT
   - Success feedback shown in UI after save
 
+## UI design system & interaction model (post-redesign)
+- **Design tokens & all `.of-*` / `.lp-*` styles** live in `web/app/globals.css` (ported from the omniforge prototype). Node accents are CSS vars: trigger=cyan, decision=purple, action=orange, schedule=green.
+- `web/components/Icon.tsx` — Lucide-style stroked-SVG icon set (`<Icon name="…" />`). All node/UI icons resolve here; unknown names fall back to `zap`. Add new glyphs here.
+- `web/components/Landing.tsx` — Home tab. Marketing landing: hero with CTAs, "How it works" 4-step cards with built-in animated visuals, capability grid, closing CTA. CTAs call `onNav(tab)` to deep-link into modules.
+- **Orchestrator is conversational, not one-shot.** `web/app/page.tsx` holds `orchMode: "chat" | "canvas"` and a persistent `orchMsgs` history.
+  - Chat mode: user describes the agent; AgentOS replies via `web/app/api/chat/route.ts` (Claude Haiku conversational). Nothing is drawn yet.
+  - Saying "execute / build it / deploy it …" (`buildIntent()`) or clicking "Build the flow" sends the **accumulated description** to `/api/build`, draws nodes, and flips to canvas mode.
+  - Chat ↔ canvas toggle ("Chat" / "View flow") never clears history.
+- **Single-node editing (canvas mode).** Click a node → right panel becomes an inspector.
+  - "Describe the change" box (text or voice) → `web/app/api/edit-node/route.ts` (Claude Haiku, `generateObject`) regenerates just that node's `type/icon/title/subtitle/meta`. Rest of the flow is untouched.
+  - Manual field controls (type swatches, title, subtitle, meta, icon) live-edit the node; **Delete node** also drops connected edges.
+- **Voice = push-to-talk.** `handleVoice(target)` in `page.tsx` uses Web Speech API with `continuous + interimResults`; click mic to start, click again to stop. It does NOT auto-submit — the user reviews then hits Send. Targets: `architect` | `insights` | `node`.
+
 ## Key files — read these first
 | File | What it does |
 |------|-------------|
 | `web/lib/schema.ts` | Zod schemas — single source of truth for all types. Change here first. |
-| `web/lib/configToGraph.ts` | Converts `AutomationConfig` JSON → `{ nodes, edges }` for the canvas |
+| `web/lib/configToGraph.ts` | Converts `AutomationConfig` JSON → `{ nodes, edges }` (NODE_W=218, NODE_H=124) |
 | `web/app/api/build/route.ts` | Core LLM pipeline: prompt → `generateObject()` → graph |
+| `web/app/api/chat/route.ts` | Conversational orchestrator replies (Claude Haiku) — no graph drawn |
+| `web/app/api/edit-node/route.ts` | Regenerate a single node from a plain-language instruction (Claude Haiku) |
 | `web/app/api/insights/route.ts` | Text-to-SQL: question → Claude Haiku → SQL → Supabase |
 | `web/app/api/cron/route.ts` | Natural language → cron expression → BullMQ repeatable job |
-| `web/components/NodeCanvas.tsx` | Custom pan/drag canvas — DO NOT replace with React Flow for hackathon |
+| `web/app/page.tsx` | Command Center: sidebar rail, all tabs, orchestrator chat/canvas state, node inspector |
+| `web/components/NodeCanvas.tsx` | Custom pan/drag/auto-fit canvas, animated bezier edges — DO NOT replace with React Flow |
+| `web/components/AgentNode.tsx` | Single node card; clickable for selection/editing |
+| `web/components/Icon.tsx` | Lucide-style SVG icon set used across the UI |
+| `web/components/Landing.tsx` | Home / marketing landing page |
+| `web/components/InsightRenderer.tsx` | Renders insight results as table / bar / line chart |
 | `engine/src/routes/webhook.ts` | Meta webhook verifier + event dispatcher |
 | `engine/src/lib/executor.ts` | JSON state machine runner → Meta API actions |
 | `engine/src/lib/sentiment.ts` | Claude Haiku intent/sentiment classifier |
@@ -128,7 +150,9 @@ Meta event → POST /webhook/meta (engine :4000)
 ```
 
 ## Demo script (rehearse this)
-1. Architect tab → type/speak: "Watch IG comments. If someone asks for price, DM them. Hide toxic comments." → click Build → nodes animate onto canvas
-2. DM the test Instagram account live → bot replies in real time
-3. Insights tab → type: "How many leads today?" → instant answer
-4. Insights tab → type: "Send me a summary every morning at 9 AM" → cron badge appears
+1. Home tab → product landing; click "Build an agent" → Orchestrator
+2. Orchestrator (chat) → type/speak: "Watch IG comments. If someone asks for price, DM them. Hide toxic comments." → AgentOS replies conversationally → say "execute" → nodes animate onto canvas
+3. Click a node → "Describe the change": e.g. "send an email instead of a DM" → node regenerates in place. Toggle back to Chat — history is preserved.
+4. DM the test Instagram account live → bot replies in real time
+5. Insights tab → type: "How many leads today?" → instant answer
+6. Insights tab → type: "Send me a summary every morning at 9 AM" → cron badge appears

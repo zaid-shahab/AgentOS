@@ -1,9 +1,9 @@
 import type { AutomationConfig, GraphNode, GraphEdge, Graph } from "./schema";
 
-const NODE_W = 240;
-const NODE_H = 100;
+const NODE_W = 218;
+const NODE_H = 124;
 const COL_GAP = 120;
-const ROW_GAP = 30;
+const ROW_GAP = 38;
 
 const PLATFORM_ICON: Record<string, string> = {
   instagram_comment: "instagram",
