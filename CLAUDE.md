@@ -40,7 +40,17 @@ Required keys before running:
 Meta keys (`META_APP_SECRET`, `META_VERIFY_TOKEN`, `META_PAGE_ACCESS_TOKEN`) are only needed for webhook testing — app runs fine without them.
 
 ## Database setup
-Run `supabase/migrations/001_init.sql` in the Supabase SQL Editor once per project setup. Creates: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifications` + pgvector functions.
+Run migrations in order in the Supabase SQL Editor:
+1. `supabase/migrations/001_init.sql` — creates all tables, pgvector index, `run_readonly_query` function
+2. `supabase/migrations/002_seed_demo_data.sql` — seeds 15 fake interactions + 3 leads for testing Insights tab (dev/demo only)
+
+Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifications`
+
+## Prompt tuning status (Dev 2)
+- `web/app/api/build/route.ts` SYSTEM_PROMPT tuned and tested ✅
+- Unconditional actions correctly skip Decision node
+- Multi-condition prompts produce correct fan-out graphs
+- intent_tag vocab: Pricing, Troll, Support, Lead, Spam, Hostile, Angry, Shipping, General
 
 ## Key files — read these first
 | File | What it does |
