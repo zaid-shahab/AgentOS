@@ -2,7 +2,7 @@
 export interface AutomationConfig {
   name: string;
   trigger: {
-    platform: "instagram_comment" | "instagram_dm" | "messenger_dm";
+    platform: "instagram_comment" | "instagram_dm" | "messenger_dm" | "facebook_comment" | "facebook_post" | "instagram_post";
     description: string;
   };
   evaluations: {

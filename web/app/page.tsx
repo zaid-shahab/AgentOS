@@ -156,24 +156,31 @@ export default function CommandCenter() {
 
   // Preload the latest saved config on mount so the canvas isn't empty after a restart.
   useEffect(() => {
+    let cancelled = false;
     fetch("/api/build?accountId=demo")
       .then((r) => r.json())
       .then((data) => {
+        // Abort if component unmounted or user already built a fresh flow while fetch was in flight.
+        if (cancelled) return;
         if (data.nodes?.length > 0) {
-          setNodes(data.nodes);
-          setEdges(data.edges);
-          setOrchMode("canvas");
+          setNodes((current) => {
+            if (current.length > 0) return current; // fresh build already landed — don't overwrite
+            return data.nodes;
+          });
+          setEdges((current) => (current.length > 0 ? current : data.edges));
+          setOrchMode((m) => (m === "canvas" ? m : "canvas"));
           setOrchMsgs((m) => [
             ...m,
             {
               role: "assistant",
               content:
-                "Welcome back — your previous flow has been restored. Click "View flow" to see the canvas, or keep describing to rebuild it.",
+                "Welcome back — your previous flow has been restored. Click “View flow” to see the canvas, or keep describing to rebuild it.",
             },
           ]);
         }
       })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {

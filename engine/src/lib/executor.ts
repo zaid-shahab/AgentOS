@@ -9,7 +9,8 @@ const PAGE_TOKEN = process.env.META_PAGE_ACCESS_TOKEN!;
 
 interface Context {
   text: string;
-  senderId: string;
+  senderId: string;   // user/author ID — used for send_dm
+  commentId?: string; // comment object ID — used for hide_comment
   platform: string;
   sentiment: string;
   intent_tag: string;
@@ -32,13 +33,26 @@ export async function executeConfig(config: AutomationConfig, ctx: Context): Pro
 
   switch (action.type) {
     case "send_dm": {
+      // Post-type triggers don't support cold outbound DMs — Messenger's 24-hour policy
+      // requires the user to have messaged first, and self-messaging a Page is rejected.
+      // Fall back to tagging the post author as a lead instead.
+      if (ctx.platform === "facebook_post" || ctx.platform === "instagram_post") {
+        await supabase.from("leads").insert({
+          account_id: ctx.accountId,
+          sender_id:  ctx.senderId,
+          message:    ctx.text,
+          intent_tag: ctx.intent_tag,
+        });
+        return "tag_lead_from_post";
+      }
       const reply = (action.payload?.message as string) || "Thanks for reaching out!";
       await sendDM(ctx.senderId, reply);
       return "send_dm";
     }
 
     case "hide_comment": {
-      await hideComment(ctx.senderId);
+      if (!ctx.commentId) return "no_action"; // can't hide without the comment's own ID
+      await hideComment(ctx.commentId);
       return "hide_comment";
     }
 
@@ -53,6 +67,10 @@ export async function executeConfig(config: AutomationConfig, ctx: Context): Pro
     }
 
     case "rag_query": {
+      // Post triggers can't receive DMs — log the intent and move on
+      if (ctx.platform === "facebook_post" || ctx.platform === "instagram_post") {
+        return "no_action";
+      }
       const reply = await ragAndReply(ctx.text, ctx.accountId);
       await sendDM(ctx.senderId, reply);
       return "rag_query";

@@ -60,6 +60,7 @@ async function processEvent(
 ) {
   let text: string | null = null;
   let senderId = "unknown";
+  let commentId: string | undefined;
   let platform: string;
 
   if (event.message?.text) {
@@ -69,16 +70,18 @@ async function processEvent(
     platform = object === "instagram" ? "instagram_dm" : "messenger_dm";
 
   } else if (field === "comments" && event.value?.text) {
-    // Instagram comment (field: "comments", value.text)
+    // Instagram comment — value.id is the comment ID, value.from.id is the author
     text = event.value.text;
     senderId = event.value?.from?.id ?? "unknown";
+    commentId = event.value?.id;
     platform = "instagram_comment";
 
   } else if (field === "feed" && event.value?.message) {
-    // Facebook Page feed event — comment or post
+    // Facebook Page feed — item="comment" has a comment_id, item=post has post_id
     const item = event.value?.item as string | undefined;
     text = event.value.message;
     senderId = event.value?.from?.id ?? "unknown";
+    commentId = item === "comment" ? (event.value?.comment_id ?? event.value?.id) : undefined;
     platform = item === "comment" ? "facebook_comment" : "facebook_post";
 
   } else {
@@ -107,7 +110,7 @@ async function processEvent(
 
   // 3. Execute
   const action_taken = data?.config
-    ? await executeConfig(data.config, { text, senderId, platform, sentiment, intent_tag, accountId })
+    ? await executeConfig(data.config, { text, senderId, commentId, platform, sentiment, intent_tag, accountId })
     : "no_config";
 
   console.log(`[executor] action_taken:${action_taken}`);

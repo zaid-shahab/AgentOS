@@ -54,17 +54,27 @@ export async function POST(req: NextRequest) {
     });
 
     // If the user provided knowledge data in chat, save it to KB with embeddings.
+    let reply = object.reply;
     if (object.kb_save?.trim()) {
       try {
         await embedAndSave(object.kb_save, accountId, "chat");
-      } catch {
-        // Don't fail the whole response if KB save fails — the reply still goes through.
-        console.warn("[chat] kb_save failed — embedAndSave threw");
+      } catch (e) {
+        console.warn("[chat] kb_save failed:", e);
+        // Replace the confirmation with a corrective note so the user knows to use the KB tab.
+        reply = reply.replace(
+          /I('ve| have) saved that to your Knowledge Base[^.]*\./i,
+          "I couldn't save that to your Knowledge Base automatically — please paste it in the Knowledge Base tab directly."
+        );
+        // If the reply didn't contain the save confirmation, append a warning.
+        if (!reply.includes("Knowledge Base tab")) {
+          reply += " (Note: Knowledge Base save failed — paste it in the Knowledge Base tab instead.)";
+        }
       }
     }
 
-    return NextResponse.json({ reply: object.reply });
-  } catch {
+    return NextResponse.json({ reply });
+  } catch (e) {
+    console.error("[chat] generateObject failed:", e);
     return NextResponse.json(
       { error: "I had trouble responding just now. Please try again." },
       { status: 500 }

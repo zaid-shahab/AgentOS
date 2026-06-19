@@ -36,7 +36,7 @@ cd engine && npm run worker  # report worker (separate terminal, only needed for
 Required keys before running:
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - `ANTHROPIC_API_KEY`
-- `OPENAI_API_KEY` (embeddings only)
+- `OPENAI_API_KEY` — required in **both** `web/.env.local` AND `engine/.env`; used for `text-embedding-3-small` embeddings (KB storage + RAG retrieval)
 - `REDIS_URL=redis://localhost:6379`
 
 Meta keys (`META_APP_SECRET`, `META_VERIFY_TOKEN`, `META_PAGE_ACCESS_TOKEN`) are only needed for webhook testing — app runs fine without them.
@@ -71,6 +71,8 @@ Run migrations in order in the Supabase SQL Editor:
 2. `supabase/migrations/002_seed_demo_data.sql` — seeds 15 fake interactions + 3 leads for testing Insights tab (dev/demo only)
 3. `supabase/migrations/003_cron_jobs.sql` — creates `cron_jobs` table for persistent scheduled report storage
 4. `supabase/migrations/004_kb_source.sql` — adds `source` column to `knowledge_base` (tracks filename for uploaded docs)
+5. `supabase/migrations/005_fix_match_knowledge.sql` — fixes `match_knowledge()` to exclude NULL-embedding rows (legacy inserts before vector embeddings were added); sets default match_count to 5
+6. `supabase/migrations/006_ivfflat_lists.sql` — rebuilds ivfflat index with `lists=10` (was 100); index now activates with ≥10 rows instead of ≥100
 
 Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifications`, `cron_jobs`
 
@@ -80,6 +82,7 @@ Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifi
   - Multi-condition prompts produce correct fan-out graphs
   - Pre-flight classifier (Claude Haiku) rejects non-Meta prompts before hitting generateObject
   - intent_tag vocab: Pricing, Troll, Support, Lead, Spam, Hostile, Angry, Shipping, General
+  - **GET endpoint added** — returns the latest saved config as a graph for preloading on restart
 - `web/app/api/insights/route.ts` — two-step pipeline: SQL generation → result interpretation
   - Returns plain-English answer from actual query results (not just SQL explanation)
   - `render_as` field: "text" | "table" | "bar_chart" | "line_chart" — set by LLM based on user intent
@@ -93,13 +96,36 @@ Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifi
 - `web/app/api/cron/route.ts` — cron jobs persisted to Supabase `cron_jobs` table
   - Scheduled Reports tab reads from Supabase (not Redis) so survives Docker restarts
   - DELETE removes from both BullMQ and Supabase
-- `web/app/api/knowledge/route.ts` — saves text to `knowledge_base` table (two modes)
+- `web/app/api/knowledge/route.ts` — saves text to `knowledge_base` table with pgvector embeddings
   - **File upload mode**: multipart/form-data with `file` field — parses PDF (`pdf-parse`), DOCX (`mammoth`), TXT/MD/CSV
-  - **Text paste mode**: JSON `{ text }` — existing plain text chunking
-  - No OpenAI dependency — plain text storage, executor retrieves with simple SELECT
-  - Stores `source` (filename) alongside each chunk
+  - **Text paste mode**: JSON `{ text }` — plain text chunking
+  - All chunks embedded with `text-embedding-3-small` via `embedMany()` (single API call per upload)
+  - Stores `embedding vector(1536)` + `source` (filename) alongside each chunk
   - DELETE endpoint to remove individual chunks by id
   - Success/error feedback shown in UI after save or upload
+- `web/lib/embedAndSave.ts` — shared embedding helper used by knowledge route and chat route
+  - Chunks text (500 chars, 100 overlap), calls `embedMany`, inserts to `knowledge_base`
+- `web/app/api/chat/route.ts` — now uses `generateObject` (was `generateText`)
+  - **Clarification mode**: proactively asks for vague trigger specifics (which post?), missing pricing/product data, or unclear reply content — one question at a time
+  - **KB save from chat**: if user pastes pricing tables, FAQs, or product data directly in chat, it is extracted into `kb_save`, embedded, and saved to `knowledge_base` automatically; reply confirms storage
+  - Returns `{ reply: string }` — frontend interface unchanged
+
+## Supported trigger platforms (schema.ts + webhook.ts)
+| Platform value | Source | Webhook field |
+|---|---|---|
+| `instagram_comment` | Instagram comment on your posts | `comments` (IG webhook) |
+| `instagram_dm` | Instagram Direct Message | `messaging[]` (IG webhook) |
+| `messenger_dm` | Facebook Messenger DM | `messaging[]` (Page webhook) |
+| `facebook_comment` | Comment on Facebook Page post | `feed` (Page webhook) — subscribe in Meta dashboard |
+| `facebook_post` | New post on Facebook Page | `feed` (Page webhook) — same subscription |
+| `instagram_post` | New Instagram post | ⚠️ No real-time webhook — requires polling `/{ig-user-id}/media` via cron |
+
+**To receive `facebook_comment` and `facebook_post` events:**
+In Meta App Dashboard → Webhooks → Page → subscribe to the **`feed`** field. One subscription covers both comments and new posts on the Facebook Page.
+
+**RAG execution (engine):** `ragAndReply()` in `engine/src/lib/executor.ts` now embeds the query with `text-embedding-3-small` via direct OpenAI HTTP call, then calls the `match_knowledge()` pgvector RPC (top 5 by cosine similarity). Falls back to keyword SELECT if `OPENAI_API_KEY` is missing in engine env.
+
+**Config preload:** On page load, `web/app/page.tsx` calls `GET /api/build?accountId=demo`. If a saved config exists, nodes/edges are restored to canvas and orchMode flips to "canvas" so the user never sees an empty canvas on restart.
 
 ## UI design system & interaction model (post-redesign)
 - **Design tokens & all `.of-*` / `.lp-*` styles** live in `web/app/globals.css` (ported from the omniforge prototype). Node accents are CSS vars: trigger=cyan, decision=purple, action=orange, schedule=green.
@@ -120,7 +146,8 @@ Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifi
 | `web/lib/schema.ts` | Zod schemas — single source of truth for all types. Change here first. |
 | `web/lib/configToGraph.ts` | Converts `AutomationConfig` JSON → `{ nodes, edges }` (NODE_W=218, NODE_H=124) |
 | `web/app/api/build/route.ts` | Core LLM pipeline: prompt → `generateObject()` → graph |
-| `web/app/api/chat/route.ts` | Conversational orchestrator replies (Claude Haiku) — no graph drawn |
+| `web/app/api/chat/route.ts` | Conversational orchestrator (Claude Haiku) — asks clarifications, saves KB data from chat |
+| `web/lib/embedAndSave.ts` | Shared helper: chunk text → `embedMany` → insert to `knowledge_base` with embeddings |
 | `web/app/api/edit-node/route.ts` | Regenerate a single node from a plain-language instruction (Claude Haiku) |
 | `web/app/api/insights/route.ts` | Text-to-SQL: question → Claude Haiku → SQL → Supabase |
 | `web/app/api/cron/route.ts` | Natural language → cron expression → BullMQ repeatable job |
