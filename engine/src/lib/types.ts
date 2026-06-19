@@ -13,7 +13,7 @@ export interface AutomationConfig {
   }[];
   actions: {
     id: string;
-    type: "send_dm" | "hide_comment" | "tag_lead" | "rag_query" | "alert_webhook" | "send_email" | "no_action";
+    type: "send_dm" | "reply_comment" | "hide_comment" | "tag_lead" | "rag_query" | "alert_webhook" | "send_email" | "no_action";
     payload?: Record<string, unknown>;
     description: string;
     linked_evaluation_id?: string;

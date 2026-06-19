@@ -45,9 +45,25 @@ export async function executeConfig(config: AutomationConfig, ctx: Context): Pro
         });
         return "tag_lead_from_post";
       }
-      const reply = (action.payload?.message as string) || "Thanks for reaching out!";
-      await sendDM(ctx.senderId, reply);
+      const dmText = (action.payload?.message as string) || "Thanks for reaching out!";
+      if (ctx.platform === "facebook_comment") {
+        // Facebook comment → private reply API (shows comment context in Messenger).
+        // If commentId is missing for any reason, skip rather than sending a blind cold DM.
+        if (!ctx.commentId) return "no_action";
+        await facebookPrivateReply(ctx.commentId, dmText);
+      } else {
+        // Instagram comment or DM → standard messages API.
+        // Instagram automatically adds "replied because you commented on their post" context.
+        await sendDM(ctx.senderId, dmText);
+      }
       return "send_dm";
+    }
+
+    case "reply_comment": {
+      if (!ctx.commentId) return "no_action";
+      const replyText = (action.payload?.message as string) || "Thanks for your comment!";
+      await replyToComment(ctx.commentId, ctx.platform, replyText);
+      return "reply_comment";
     }
 
     case "hide_comment": {
@@ -82,6 +98,11 @@ export async function executeConfig(config: AutomationConfig, ctx: Context): Pro
       return "alert_webhook";
     }
 
+    case "send_email":
+      // Not implemented — email delivery is not wired up in the engine yet.
+      console.warn("[executor] send_email action is not implemented; treating as no_action");
+      return "no_action";
+
     case "no_action":
     default:
       return "no_action";
@@ -99,6 +120,31 @@ async function sendDM(recipientId: string, message: string) {
 async function hideComment(commentId: string) {
   await axios.post(`${META_BASE}/${commentId}`, {
     is_hidden: true,
+    access_token: PAGE_TOKEN,
+  });
+}
+
+async function replyToComment(commentId: string, platform: string, message: string) {
+  if (platform === "instagram_comment") {
+    // Instagram: public reply in the comment thread
+    await axios.post(`${META_BASE}/${commentId}/replies`, {
+      message,
+      access_token: PAGE_TOKEN,
+    });
+  } else if (platform === "facebook_comment") {
+    // Facebook: public reply in the comment thread
+    await axios.post(`${META_BASE}/${commentId}/comments`, {
+      message,
+      access_token: PAGE_TOKEN,
+    });
+  }
+  // No-op for DM/post platforms — reply_comment doesn't apply
+}
+
+async function facebookPrivateReply(commentId: string, message: string) {
+  // Sends a Messenger DM to the commenter — Facebook shows it as a private reply to their comment.
+  await axios.post(`${META_BASE}/${commentId}/private_replies`, {
+    message,
     access_token: PAGE_TOKEN,
   });
 }
@@ -132,14 +178,17 @@ async function ragAndReply(question: string, accountId: string): Promise<string>
     context = data?.map((r: any) => r.content).join("\n\n") ?? "";
   }
 
-  const msg = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 200,
-    system: `You are a helpful customer support agent. Use only the context below to answer.
+  try {
+    const msg = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 200,
+      system: `You are a helpful customer support agent. Use only the context below to answer.
 If the answer isn't in the context, say you'll follow up shortly.
 Context:\n${context}`,
-    messages: [{ role: "user", content: question }],
-  });
-
-  return (msg.content[0] as any).text;
+      messages: [{ role: "user", content: question }],
+    });
+    return (msg.content[0] as any).text;
+  } catch {
+    return "Thanks for your question — we'll follow up with you shortly.";
+  }
 }

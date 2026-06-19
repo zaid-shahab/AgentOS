@@ -26,6 +26,7 @@ export const ActionSchema = z.object({
   id: z.string(),
   type: z.enum([
     "send_dm",
+    "reply_comment",
     "hide_comment",
     "tag_lead",
     "rag_query",

@@ -16,7 +16,10 @@ Rules:
   - facebook_comment: comments on Facebook Page posts
   - facebook_post: new posts published on the Facebook Page
   - instagram_post: new posts published on the Instagram account
-- action types must be one of: send_dm, hide_comment, tag_lead, rag_query, alert_webhook, send_email, no_action
+- action types must be one of: send_dm, reply_comment, hide_comment, tag_lead, rag_query, alert_webhook, send_email, no_action
+  - send_dm: slide into the commenter/user's DMs (works on instagram_comment, instagram_dm, messenger_dm, facebook_comment)
+  - reply_comment: post a public reply directly in the comment thread (only for instagram_comment and facebook_comment triggers)
+  - hide_comment: hide the comment from public view (only for instagram_comment and facebook_comment triggers)
 - intent_tag should be short: Pricing, Troll, Support, Lead, Spam, Hostile, Angry, Shipping, General
 - Be concise in descriptions (max 60 chars)
 

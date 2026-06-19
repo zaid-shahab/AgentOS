@@ -3,7 +3,7 @@ import type { SVGProps } from "react";
 
 type IconName =
   | "home" | "workflow" | "database" | "settings" | "mic" | "arrowUp"
-  | "instagram" | "messenger" | "branch" | "message" | "userplus" | "shield"
+  | "instagram" | "messenger" | "branch" | "message" | "messageCircle" | "userplus" | "shield"
   | "clock" | "mail" | "sparkles" | "search" | "activity" | "check"
   | "x" | "play" | "bot" | "chevron" | "zap" | "download" | "image"
   | "tag" | "bell" | "slash" | "book" | "upload" | "file";
@@ -78,6 +78,11 @@ const ICONS: Record<IconName, (p: SvgProps) => JSX.Element> = {
   ),
   message: (p) => (
     <svg {...baseProps(p)}><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.6-.7L3 21l1.4-4.1A8.4 8.4 0 1 1 21 11.5z" /></svg>
+  ),
+  messageCircle: (p) => (
+    <svg {...baseProps(p)}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
   ),
   userplus: (p) => (
     <svg {...baseProps(p)}>

@@ -8,7 +8,10 @@ const ROW_GAP = 38;
 const PLATFORM_ICON: Record<string, string> = {
   instagram_comment: "instagram",
   instagram_dm:      "instagram",
+  instagram_post:    "instagram",
   messenger_dm:      "messenger",
+  facebook_comment:  "messenger",
+  facebook_post:     "messenger",
 };
 
 export function configToGraph(config: AutomationConfig): Graph {
@@ -45,7 +48,7 @@ export function configToGraph(config: AutomationConfig): Graph {
       icon: "branch",
       title: ev.intent_tag,
       subtitle: ev.condition,
-      meta: "GPT-4o · DECISION",
+      meta: "Claude · DECISION",
       x: col2,
       y: 40 + i * (NODE_H + ROW_GAP),
     });
@@ -90,7 +93,10 @@ function platformLabel(p: string) {
   const map: Record<string, string> = {
     instagram_comment: "Instagram Comment",
     instagram_dm:      "Instagram DM",
+    instagram_post:    "Instagram Post",
     messenger_dm:      "Messenger DM",
+    facebook_comment:  "Facebook Comment",
+    facebook_post:     "Facebook Post",
   };
   return map[p] ?? "Meta Event";
 }
@@ -98,6 +104,7 @@ function platformLabel(p: string) {
 function actionIcon(t: string) {
   const map: Record<string, string> = {
     send_dm:        "message",
+    reply_comment:  "messageCircle",
     hide_comment:   "shield",
     tag_lead:       "tag",
     rag_query:      "search",
@@ -111,6 +118,7 @@ function actionIcon(t: string) {
 function actionLabel(t: string) {
   const map: Record<string, string> = {
     send_dm:        "Send DM",
+    reply_comment:  "Reply to Comment",
     hide_comment:   "Hide Comment",
     tag_lead:       "Tag as Lead",
     rag_query:      "RAG Query → DM",

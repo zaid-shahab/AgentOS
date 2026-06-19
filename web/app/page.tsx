@@ -48,8 +48,8 @@ const NODE_TYPES: { id: GraphNode["type"]; label: string }[] = [
 ];
 
 const ICON_CHOICES = [
-  "instagram", "messenger", "branch", "message", "userplus", "shield",
-  "tag", "search", "bell", "mail", "clock", "bot", "sparkles", "zap",
+  "instagram", "messenger", "branch", "message", "messageCircle", "userplus",
+  "shield", "tag", "search", "bell", "mail", "clock", "bot", "sparkles", "zap",
 ];
 
 const ORCH_EXAMPLES = [
@@ -78,7 +78,7 @@ export default function CommandCenter() {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
-  const [buildError, setBuildError] = useState<string | null>(null);
+
   const [recording, setRecording] = useState(false);
 
   // ── Orchestrator conversation state (persists across chat ↔ canvas) ──
@@ -88,6 +88,7 @@ export default function CommandCenter() {
   ]);
   const [orchBusy, setOrchBusy] = useState(false);
   const orchEndRef = useRef<HTMLDivElement>(null);
+  const orchMsgsLengthRef = useRef(1); // tracks current orchMsgs.length for async callbacks
 
   // single-node editing
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -151,7 +152,7 @@ export default function CommandCenter() {
   const [kbUploadMsg, setKbUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const kbFileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<{ stop(): void } | null>(null);
   const voiceTargetRef = useRef<"architect" | "insights" | null>(null);
 
   // Preload the latest saved config on mount so the canvas isn't empty after a restart.
@@ -163,16 +164,15 @@ export default function CommandCenter() {
         // Abort if component unmounted or user already built a fresh flow while fetch was in flight.
         if (cancelled) return;
         if (data.nodes?.length > 0) {
-          setNodes((current) => {
-            if (current.length > 0) return current; // fresh build already landed — don't overwrite
-            return data.nodes;
-          });
+          // If the user has already started chatting or built something, don't touch their session.
+          if (orchMsgsLengthRef.current > 1) return;
+          setNodes((current) => (current.length > 0 ? current : data.nodes));
           setEdges((current) => (current.length > 0 ? current : data.edges));
           setOrchMode((m) => (m === "canvas" ? m : "canvas"));
           setOrchMsgs((m) => [
             ...m,
             {
-              role: "assistant",
+              role: "assistant" as const,
               content:
                 "Welcome back — your previous flow has been restored. Click “View flow” to see the canvas, or keep describing to rebuild it.",
             },
@@ -188,12 +188,12 @@ export default function CommandCenter() {
   }, [messages, insightBusy]);
 
   useEffect(() => {
+    orchMsgsLengthRef.current = orchMsgs.length;
     orchEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [orchMsgs, orchBusy]);
 
   // ── Orchestrator: build the actual flow from the accumulated description ───
   async function runOrchBuild(description: string) {
-    setBuildError(null);
     setLoading(true);
     try {
       const res = await fetch("/api/build", {
@@ -291,9 +291,8 @@ export default function CommandCenter() {
       return;
     }
 
-    const SR =
-      (window as unknown as { SpeechRecognition?: typeof window.SpeechRecognition }).SpeechRecognition ||
-      (window as unknown as { webkitSpeechRecognition?: typeof window.SpeechRecognition }).webkitSpeechRecognition;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
       alert("Speech recognition not supported in this browser.");
       return;

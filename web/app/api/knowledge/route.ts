@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
   const chunks = chunk(text);
   let rows;
   try {
-    rows = await chunksToRows(chunks, accountId);
+    rows = await chunksToRows(chunks, accountId, "manual");
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Embedding failed";
     return NextResponse.json({ error: msg }, { status: 500 });

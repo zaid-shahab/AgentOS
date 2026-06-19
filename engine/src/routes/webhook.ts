@@ -43,11 +43,15 @@ router.post("/meta", async (req: Request, res: Response) => {
   for (const entry of body.entry ?? []) {
     // Messaging array → DMs
     for (const event of entry.messaging ?? []) {
-      await processEvent(event, "demo", body.object, null);
+      await processEvent(event, "demo", body.object, null).catch((e) =>
+        console.error("[webhook] processEvent failed (messaging):", e?.message ?? e)
+      );
     }
     // Changes array → comments, posts
     for (const change of entry.changes ?? []) {
-      await processEvent(change, "demo", body.object, change.field);
+      await processEvent(change, "demo", body.object, change.field).catch((e) =>
+        console.error("[webhook] processEvent failed (changes):", e?.message ?? e)
+      );
     }
   }
 });
