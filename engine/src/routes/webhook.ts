@@ -41,19 +41,50 @@ router.post("/meta", async (req: Request, res: Response) => {
   if (body.object !== "instagram" && body.object !== "page") return;
 
   for (const entry of body.entry ?? []) {
-    for (const event of [...(entry.messaging ?? []), ...(entry.changes ?? [])]) {
-      await processEvent(event, "demo");
+    // Messaging array → DMs
+    for (const event of entry.messaging ?? []) {
+      await processEvent(event, "demo", body.object, null);
+    }
+    // Changes array → comments, posts
+    for (const change of entry.changes ?? []) {
+      await processEvent(change, "demo", body.object, change.field);
     }
   }
 });
 
-async function processEvent(event: any, accountId: string) {
-  // Normalise event shape
-  const isComment = !!event.value?.text;
-  const isDM      = !!event.message?.text;
-  const text      = isComment ? event.value.text : isDM ? event.message.text : null;
-  const senderId  = event.sender?.id ?? event.value?.from?.id ?? "unknown";
-  const platform  = isComment ? "instagram_comment" : "instagram_dm";
+async function processEvent(
+  event: any,
+  accountId: string,
+  object: string,     // "instagram" | "page"
+  field: string | null  // "comments" | "feed" | null (for messaging events)
+) {
+  let text: string | null = null;
+  let senderId = "unknown";
+  let platform: string;
+
+  if (event.message?.text) {
+    // Messaging array: Instagram DM or Messenger DM
+    text = event.message.text;
+    senderId = event.sender?.id ?? "unknown";
+    platform = object === "instagram" ? "instagram_dm" : "messenger_dm";
+
+  } else if (field === "comments" && event.value?.text) {
+    // Instagram comment (field: "comments", value.text)
+    text = event.value.text;
+    senderId = event.value?.from?.id ?? "unknown";
+    platform = "instagram_comment";
+
+  } else if (field === "feed" && event.value?.message) {
+    // Facebook Page feed event — comment or post
+    const item = event.value?.item as string | undefined;
+    text = event.value.message;
+    senderId = event.value?.from?.id ?? "unknown";
+    platform = item === "comment" ? "facebook_comment" : "facebook_post";
+
+  } else {
+    // Unrecognised event shape — skip
+    return;
+  }
 
   if (!text) return;
 

@@ -154,6 +154,28 @@ export default function CommandCenter() {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const voiceTargetRef = useRef<"architect" | "insights" | null>(null);
 
+  // Preload the latest saved config on mount so the canvas isn't empty after a restart.
+  useEffect(() => {
+    fetch("/api/build?accountId=demo")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.nodes?.length > 0) {
+          setNodes(data.nodes);
+          setEdges(data.edges);
+          setOrchMode("canvas");
+          setOrchMsgs((m) => [
+            ...m,
+            {
+              role: "assistant",
+              content:
+                "Welcome back — your previous flow has been restored. Click "View flow" to see the canvas, or keep describing to rebuild it.",
+            },
+          ]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, insightBusy]);

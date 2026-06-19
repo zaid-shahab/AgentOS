@@ -4,7 +4,14 @@ import { z } from "zod";
 // The JSON state machine the LLM compiles user intent into.
 
 export const TriggerSchema = z.object({
-  platform: z.enum(["instagram_comment", "instagram_dm", "messenger_dm"]),
+  platform: z.enum([
+    "instagram_comment",
+    "instagram_dm",
+    "messenger_dm",
+    "facebook_comment",
+    "facebook_post",
+    "instagram_post",
+  ]),
   description: z.string(),
 });
 

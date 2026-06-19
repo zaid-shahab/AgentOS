@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
 import { supabase } from "@/lib/supabase";
 
-// Chunk text into ~500-char pieces with overlap
 function chunk(text: string, size = 500, overlap = 100): string[] {
   const chunks: string[] = [];
   let i = 0;
@@ -10,6 +11,23 @@ function chunk(text: string, size = 500, overlap = 100): string[] {
     i += size - overlap;
   }
   return chunks.filter((c) => c.trim().length > 20);
+}
+
+async function chunksToRows(
+  chunks: string[],
+  accountId: string,
+  source?: string
+) {
+  const { embeddings } = await embedMany({
+    model: openai.embedding("text-embedding-3-small"),
+    values: chunks,
+  });
+  return chunks.map((content, i) => ({
+    account_id: accountId,
+    content,
+    source: source ?? null,
+    embedding: embeddings[i],
+  }));
 }
 
 async function extractText(file: File): Promise<string> {
@@ -79,8 +97,13 @@ export async function POST(req: NextRequest) {
     }
 
     const chunks = chunk(text);
-    const source = file.name;
-    const rows = chunks.map((content) => ({ account_id: accountId, content, source }));
+    let rows;
+    try {
+      rows = await chunksToRows(chunks, accountId, file.name);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Embedding failed";
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
 
     const { error } = await supabase.from("knowledge_base").insert(rows);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -93,7 +116,13 @@ export async function POST(req: NextRequest) {
   if (!text?.trim()) return NextResponse.json({ error: "text required" }, { status: 400 });
 
   const chunks = chunk(text);
-  const rows = chunks.map((content) => ({ account_id: accountId, content }));
+  let rows;
+  try {
+    rows = await chunksToRows(chunks, accountId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Embedding failed";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 
   const { error } = await supabase.from("knowledge_base").insert(rows);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

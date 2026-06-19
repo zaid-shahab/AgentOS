@@ -85,16 +85,34 @@ async function hideComment(commentId: string) {
   });
 }
 
-async function ragAndReply(question: string, accountId: string): Promise<string> {
-  // Get embedding for the question using Supabase edge function or direct OpenAI call
-  // For simplicity, we do a keyword search fallback here; replace with pgvector match in prod
-  const { data } = await supabase
-    .from("knowledge_base")
-    .select("content")
-    .eq("account_id", accountId)
-    .limit(3);
+async function embedText(text: string): Promise<number[]> {
+  const res = await axios.post(
+    "https://api.openai.com/v1/embeddings",
+    { input: text, model: "text-embedding-3-small" },
+    { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
+  );
+  return res.data.data[0].embedding;
+}
 
-  const context = data?.map((r: any) => r.content).join("\n\n") ?? "";
+async function ragAndReply(question: string, accountId: string): Promise<string> {
+  let context = "";
+  try {
+    const queryEmbedding = await embedText(question);
+    const { data } = await supabase.rpc("match_knowledge", {
+      query_embedding: queryEmbedding,
+      match_account: accountId,
+      match_count: 5,
+    });
+    context = data?.map((r: any) => r.content).join("\n\n") ?? "";
+  } catch {
+    // Fallback: keyword scan if embedding fails (e.g. OPENAI_API_KEY not set)
+    const { data } = await supabase
+      .from("knowledge_base")
+      .select("content")
+      .eq("account_id", accountId)
+      .limit(5);
+    context = data?.map((r: any) => r.content).join("\n\n") ?? "";
+  }
 
   const msg = await client.messages.create({
     model: "claude-haiku-4-5-20251001",

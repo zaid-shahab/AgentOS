@@ -6,10 +6,16 @@ import { configToGraph } from "@/lib/configToGraph";
 import { supabase } from "@/lib/supabase";
 
 const SYSTEM_PROMPT = `You are AgentOS's Generative Engine.
-Convert the user's plain-English description into a strict JSON automation config for Meta platforms (Instagram and Messenger only).
+Convert the user's plain-English description into a strict JSON automation config for Meta platforms (Instagram and Facebook/Messenger).
 
 Rules:
-- platform must be one of: instagram_comment, instagram_dm, messenger_dm
+- platform must be one of: instagram_comment, instagram_dm, messenger_dm, facebook_comment, facebook_post, instagram_post
+  - instagram_comment: comments on Instagram posts
+  - instagram_dm: direct messages to the Instagram account
+  - messenger_dm: direct messages via Facebook Messenger
+  - facebook_comment: comments on Facebook Page posts
+  - facebook_post: new posts published on the Facebook Page
+  - instagram_post: new posts published on the Instagram account
 - action types must be one of: send_dm, hide_comment, tag_lead, rag_query, alert_webhook, send_email, no_action
 - intent_tag should be short: Pricing, Troll, Support, Lead, Spam, Hostile, Angry, Shipping, General
 - Be concise in descriptions (max 60 chars)
@@ -22,7 +28,28 @@ Evaluation rules:
 
 Examples:
 - "Reply to every DM with a greeting" → evaluations: [], actions: [{ type: send_dm, no linked_evaluation_id }]
-- "If someone asks for price, DM them. Hide toxic comments." → evaluations: [Pricing, Troll], actions linked to each`;
+- "If someone asks for price, DM them. Hide toxic comments." → evaluations: [Pricing, Troll], actions linked to each
+- "Watch Facebook comments, hide toxic ones" → trigger: facebook_comment, evaluations: [Troll], actions: [hide_comment]`;
+
+export async function GET(req: NextRequest) {
+  const accountId = req.nextUrl.searchParams.get("accountId") ?? "demo";
+  const { data } = await supabase
+    .from("automation_configs")
+    .select("config")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!data?.config) return NextResponse.json({ nodes: [], edges: [], config: null });
+
+  try {
+    const graph = configToGraph(data.config);
+    return NextResponse.json(graph);
+  } catch {
+    return NextResponse.json({ nodes: [], edges: [], config: null });
+  }
+}
 
 export async function POST(req: NextRequest) {
   const { prompt, accountId = "demo" } = await req.json();
@@ -35,7 +62,7 @@ export async function POST(req: NextRequest) {
   const { text: check } = await generateText({
     model: anthropic("claude-haiku-4-5-20251001"),
     system: `You are a classifier. Reply with only YES or NO.
-Is the following request about automating Instagram comments, Instagram DMs, or Messenger DMs?`,
+Is the following request about automating Instagram (comments, DMs, posts), Facebook Page (comments, posts), or Messenger DMs?`,
     prompt,
   });
 
