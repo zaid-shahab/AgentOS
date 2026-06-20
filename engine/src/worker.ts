@@ -1,12 +1,14 @@
 import "dotenv/config";
 import { Worker } from "bullmq";
-import IORedis from "ioredis";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabase } from "./lib/supabase";
 
-const connection = new IORedis(process.env.REDIS_URL || "redis://localhost:6379", {
-  maxRetriesPerRequest: null,
-});
+const redisUrl = new URL(process.env.REDIS_URL || "redis://localhost:6379");
+const connection = {
+  host: redisUrl.hostname,
+  port: Number(redisUrl.port) || 6379,
+  maxRetriesPerRequest: null as null,
+};
 
 const client = new Anthropic();
 
