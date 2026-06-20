@@ -32,12 +32,13 @@ router.get("/meta", (req: Request, res: Response) => {
 
 // ── Webhook event handler (POST) ──────────────────────────────────────────────
 router.post("/meta", async (req: Request, res: Response) => {
-  if (!verifySignature(req)) return res.sendStatus(401);
+  if (APP_SECRET && !verifySignature(req)) return res.sendStatus(401);
 
   // Acknowledge immediately — Meta expects <5s
   res.sendStatus(200);
 
   const body = JSON.parse((req.body as Buffer).toString());
+  console.log("[webhook] raw payload:", JSON.stringify(body, null, 2));
   if (body.object !== "instagram" && body.object !== "page") return;
 
   for (const entry of body.entry ?? []) {
@@ -68,6 +69,9 @@ async function processEvent(
   let platform: string;
 
   if (event.message?.text) {
+    // Skip echo events (bot's own outgoing messages reflected back by Meta)
+    if (event.message.is_echo) return;
+
     // Messaging array: Instagram DM or Messenger DM
     text = event.message.text;
     senderId = event.sender?.id ?? "unknown";
