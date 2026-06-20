@@ -32,7 +32,7 @@ router.get("/meta", (req: Request, res: Response) => {
 
 // ── Webhook event handler (POST) ──────────────────────────────────────────────
 router.post("/meta", async (req: Request, res: Response) => {
-  if (APP_SECRET && !verifySignature(req)) return res.sendStatus(401);
+  if (APP_SECRET && process.env.VERIFY_WEBHOOK_SIGNATURE !== "false" && !verifySignature(req)) return res.sendStatus(401);
 
   // Acknowledge immediately — Meta expects <5s
   res.sendStatus(200);
