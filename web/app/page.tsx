@@ -312,7 +312,7 @@ export default function CommandCenter() {
 
     recognition.onstart = () => setRecording(true);
 
-    recognition.onresult = (e: SpeechRecognitionEvent) => {
+    recognition.onresult = (e: any) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
@@ -324,7 +324,7 @@ export default function CommandCenter() {
       setter(live);
     };
 
-    recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
+    recognition.onerror = (e: any) => {
       // Ignore "no-speech" so a pause doesn't kill the session — just keep listening.
       if (e.error === "no-speech" || e.error === "aborted") return;
       console.warn("Speech recognition error:", e.error);

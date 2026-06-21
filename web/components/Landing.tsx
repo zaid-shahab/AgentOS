@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Icon from "./Icon";
 
 type NavTarget = "architect" | "insights" | "knowledge" | "crons";
@@ -101,7 +102,7 @@ function VizInsights() {
   );
 }
 
-const STEPS: { n: string; tag: string; title: string; body: string; Viz: () => JSX.Element }[] = [
+const STEPS: { n: string; tag: string; title: string; body: string; Viz: () => React.ReactElement }[] = [
   {
     n: "01", tag: "DESCRIBE", title: "Speak it into existence", Viz: VizDescribe,
     body: "Hit the mic and describe the agent in plain language — the trigger, the logic, the actions. No flow-builder, no code.",

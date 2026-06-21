@@ -1,4 +1,5 @@
 // Lucide-style stroked SVG icon set for AgentOS, ported from omniforge/icons.jsx.
+import React from "react";
 import type { SVGProps } from "react";
 
 type IconName =
@@ -21,7 +22,7 @@ const baseProps = (extra: SvgProps = {}): SvgProps => ({
   ...extra,
 });
 
-const ICONS: Record<IconName, (p: SvgProps) => JSX.Element> = {
+const ICONS: Record<IconName, (p: SvgProps) => React.ReactElement> = {
   home: (p) => (
     <svg {...baseProps(p)}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></svg>
   ),
