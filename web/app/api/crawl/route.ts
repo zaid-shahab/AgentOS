@@ -11,32 +11,26 @@ const supabase = createClient(
 );
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const MAX_PAGES   = 40;
-const MAX_DEPTH   = 3;
-const DELAY_MS    = 250;   // polite delay between fetches
-const CHUNK_SIZE  = 600;
-const CHUNK_OVERLAP = 100;
-const TIMEOUT_MS  = 12_000;
+const MAX_PAGES     = 40;
+const MAX_DEPTH     = 3;
+const DELAY_MS      = 220;
+const CHUNK_SIZE    = 700;
+const CHUNK_OVERLAP = 120;
+const TIMEOUT_MS    = 14_000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Normalise a URL: strip fragment, trailing slash, lowercase host */
 function normalise(url: string): string {
   try {
     const u = new URL(url);
     u.hash = "";
     u.hostname = u.hostname.toLowerCase();
-    // remove trailing slash on non-root paths
-    if (u.pathname.length > 1 && u.pathname.endsWith("/")) {
+    if (u.pathname.length > 1 && u.pathname.endsWith("/"))
       u.pathname = u.pathname.slice(0, -1);
-    }
     return u.toString();
-  } catch {
-    return url;
-  }
+  } catch { return url; }
 }
 
-/** Extract same-domain absolute links from an HTML document */
 function extractLinks($: cheerio.CheerioAPI, base: string, origin: string): string[] {
   const links: string[] = [];
   $("a[href]").each((_, el) => {
@@ -44,51 +38,91 @@ function extractLinks($: cheerio.CheerioAPI, base: string, origin: string): stri
     try {
       const abs = new URL(href, base).toString();
       const u   = new URL(abs);
-      // same origin, only http/https, skip assets
       if (
         u.origin === origin &&
         (u.protocol === "http:" || u.protocol === "https:") &&
         !/\.(jpg|jpeg|png|gif|svg|webp|ico|css|js|woff2?|ttf|pdf|zip|mp4|mp3)(\?|$)/i.test(u.pathname)
-      ) {
-        links.push(normalise(abs));
-      }
-    } catch {
-      // ignore malformed URLs
-    }
+      ) links.push(normalise(abs));
+    } catch { /* skip */ }
   });
   return [...new Set(links)];
 }
 
-/** Pull readable text from a page, stripping boilerplate tags */
+/**
+ * Pull readable text from a page.
+ *
+ * Strategy (ordered by reliability):
+ * 1. Meta tags — always present even on React/JS-rendered sites
+ * 2. Page title
+ * 3. Headings h1–h5
+ * 4. Body paragraphs, lists, tables, product/service/feature content
+ *
+ * We deliberately keep <header> body text — many brand sites put their
+ * hero tagline and key services inside <header>.  We only strip <nav>
+ * inside headers, pure navigation elements, and script/style tags.
+ */
 function extractText($: cheerio.CheerioAPI, url: string): string {
-  // Remove noise elements
-  $("script, style, noscript, iframe, svg, header, footer, nav, aside, " +
-    "[role='navigation'], [role='banner'], [role='contentinfo'], " +
-    ".cookie-banner, .cookie-consent, #cookie-notice, " +
-    ".nav, .navbar, .sidebar, .footer, .header").remove();
-
-  // Build structured text: title → h1-h3 → paragraphs → lists → table cells
   const parts: string[] = [];
 
-  const title = $("title").text().trim();
-  if (title) parts.push(`Page: ${title}`);
+  // ── 1. Meta tags (work even when JS hasn't rendered the page) ─────────────
+  const metaDesc  = $('meta[name="description"]').attr("content")?.trim();
+  const ogTitle   = $('meta[property="og:title"]').attr("content")?.trim();
+  const ogDesc    = $('meta[property="og:description"]').attr("content")?.trim();
+  const ogSite    = $('meta[property="og:site_name"]').attr("content")?.trim();
+  const twDesc    = $('meta[name="twitter:description"]').attr("content")?.trim();
+  const kwds      = $('meta[name="keywords"]').attr("content")?.trim();
 
-  $("h1, h2, h3").each((_, el) => {
-    const t = $(el).text().trim();
-    if (t) parts.push(`# ${t}`);
-  });
+  const pageTitle = $("title").text().trim();
 
-  $("p, li, td, th, dt, dd, blockquote, [class*='product'], [class*='price'], [class*='description']").each((_, el) => {
+  if (pageTitle)                          parts.push(`Page: ${pageTitle}`);
+  if (ogSite && ogSite !== pageTitle)     parts.push(`Brand: ${ogSite}`);
+  if (ogTitle && ogTitle !== pageTitle)   parts.push(`Title: ${ogTitle}`);
+  if (metaDesc)                           parts.push(`Description: ${metaDesc}`);
+  if (ogDesc && ogDesc !== metaDesc)      parts.push(`About: ${ogDesc}`);
+  if (twDesc && twDesc !== metaDesc && twDesc !== ogDesc) parts.push(`Summary: ${twDesc}`);
+  if (kwds)                               parts.push(`Keywords: ${kwds}`);
+
+  // ── 2. Strip only true noise — NOT <header> body text ─────────────────────
+  $(
+    "script, style, noscript, iframe, " +
+    "nav, [role='navigation'], " +           // navigation menus only
+    ".cookie-banner, .cookie-consent, #cookie-notice, #cookie-bar, " +
+    ".ad, .ads, .advertisement, " +
+    "[aria-hidden='true']"
+  ).remove();
+
+  // ── 3. Structured heading extraction ──────────────────────────────────────
+  $("h1, h2, h3, h4, h5").each((_, el) => {
     const t = $(el).text().replace(/\s+/g, " ").trim();
-    if (t.length > 20) parts.push(t);  // skip tiny fragments
+    if (t.length > 2) parts.push(`# ${t}`);
   });
 
-  // Deduplicate adjacent identical lines
-  const deduped = parts.filter((v, i, a) => i === 0 || v !== a[i - 1]);
-  return `[Source: ${url}]\n\n` + deduped.join("\n");
+  // ── 4. Body content ───────────────────────────────────────────────────────
+  $(
+    "p, li, td, th, dt, dd, blockquote, " +
+    "[class*='hero'], [class*='tagline'], [class*='slogan'], " +
+    "[class*='service'], [class*='feature'], [class*='benefit'], " +
+    "[class*='product'], [class*='price'], [class*='plan'], " +
+    "[class*='description'], [class*='about'], [class*='overview'], " +
+    "[class*='card'], [class*='item'], [class*='text'], " +
+    "[class*='content'], [class*='intro'], [class*='summary']"
+  ).each((_, el) => {
+    const t = $(el).text().replace(/\s+/g, " ").trim();
+    if (t.length > 15) parts.push(t);   // lower bar — short phrases matter
+  });
+
+  // Deduplicate exact duplicates while preserving order
+  const seen  = new Set<string>();
+  const final = parts.filter((v) => {
+    const k = v.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  return `[Source: ${url}]\n\n` + final.join("\n");
 }
 
-/** Split text into overlapping chunks */
 function chunkText(text: string): string[] {
   const chunks: string[] = [];
   let start = 0;
@@ -96,19 +130,19 @@ function chunkText(text: string): string[] {
     chunks.push(text.slice(start, start + CHUNK_SIZE));
     start += CHUNK_SIZE - CHUNK_OVERLAP;
   }
-  return chunks.filter((c) => c.trim().length > 30);
+  return chunks.filter((c) => c.trim().length > 20);
 }
 
-/** Fetch a page with timeout, returning HTML or null on failure */
 async function fetchPage(url: string): Promise<string | null> {
   try {
-    const ctrl = new AbortController();
+    const ctrl  = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-    const res = await fetch(url, {
+    const res   = await fetch(url, {
       signal: ctrl.signal,
       headers: {
-        "User-Agent": "AgentOS-Crawler/1.0 (informational bot; contact support@agentos.ai)",
-        "Accept": "text/html,application/xhtml+xml",
+        "User-Agent": "AgentOS-Crawler/1.0 (+https://agentos.ai/bot)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
       },
     });
     clearTimeout(timer);
@@ -116,18 +150,13 @@ async function fetchPage(url: string): Promise<string | null> {
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.includes("text/html")) return null;
     return await res.text();
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 // ── POST /api/crawl ───────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const { url, accountId = "demo", replace = true } = await req.json();
-
-  if (!url) {
-    return NextResponse.json({ error: "url is required" }, { status: 400 });
-  }
+  if (!url) return NextResponse.json({ error: "url is required" }, { status: 400 });
 
   let startUrl: URL;
   try {
@@ -138,7 +167,7 @@ export async function POST(req: NextRequest) {
 
   const origin = startUrl.origin;
 
-  // ── 1. Delete existing chunks from this domain if replace=true ────────────
+  // 1. Delete existing chunks from this domain ────────────────────────────────
   if (replace) {
     await supabase
       .from("knowledge_base")
@@ -147,10 +176,10 @@ export async function POST(req: NextRequest) {
       .like("source", `${origin}%`);
   }
 
-  // ── 2. BFS crawl ──────────────────────────────────────────────────────────
+  // 2. BFS crawl ─────────────────────────────────────────────────────────────
   type QueueItem = { url: string; depth: number };
-  const queue: QueueItem[]   = [{ url: normalise(startUrl.toString()), depth: 0 }];
-  const visited  = new Set<string>();
+  const queue: QueueItem[]  = [{ url: normalise(startUrl.toString()), depth: 0 }];
+  const visited = new Set<string>();
   const allText: { url: string; text: string }[] = [];
 
   while (queue.length > 0 && visited.size < MAX_PAGES) {
@@ -161,35 +190,32 @@ export async function POST(req: NextRequest) {
     const html = await fetchPage(item.url);
     if (!html) continue;
 
-    const $ = cheerio.load(html);
+    const $    = cheerio.load(html);
     const text = extractText($, item.url);
-    if (text.trim().length > 50) {
+
+    // Lower threshold — even meta-only pages are valuable
+    if (text.trim().length > 30) {
       allText.push({ url: item.url, text });
     }
 
-    // Queue child links if not at max depth
     if (item.depth < MAX_DEPTH) {
       const links = extractLinks($, item.url, origin);
       for (const link of links) {
-        if (!visited.has(link)) {
-          queue.push({ url: link, depth: item.depth + 1 });
-        }
+        if (!visited.has(link)) queue.push({ url: link, depth: item.depth + 1 });
       }
     }
 
-    // Polite delay
     if (queue.length > 0) await new Promise((r) => setTimeout(r, DELAY_MS));
   }
 
   if (allText.length === 0) {
     return NextResponse.json({
-      error: "No readable content found. The site may require JavaScript to render (SPA).",
-      pages: 0,
-      chunks: 0,
+      error: "No readable content found. The site may be fully JS-rendered (SPA). Try adding an OpenAI key and re-crawling, or paste your content manually.",
+      pages: 0, chunks: 0,
     }, { status: 422 });
   }
 
-  // ── 3. Chunk all pages ────────────────────────────────────────────────────
+  // 3. Chunk ─────────────────────────────────────────────────────────────────
   const allChunks: { content: string; source: string }[] = [];
   for (const { url: pageUrl, text } of allText) {
     for (const chunk of chunkText(text)) {
@@ -197,17 +223,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 4. Embed in batches of 96 (OpenAI limit) ─────────────────────────────
+  // 4. Embed (if OpenAI key present) + insert ────────────────────────────────
   const BATCH = 96;
-  let totalInserted = 0;
-  let embeddingsGenerated = false;
+  let totalInserted     = 0;
+  let embeddingsEnabled = false;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
   for (let i = 0; i < allChunks.length; i += BATCH) {
     const batch = allChunks.slice(i, i + BATCH);
-    const texts  = batch.map((c) => c.content);
+    const texts = batch.map((c) => c.content);
 
-    let embeddings: number[][] = texts.map(() => []);
+    let embeddings: (number[] | null)[] = texts.map(() => null);
+
     if (hasOpenAI) {
       try {
         const result = await embedMany({
@@ -215,9 +242,9 @@ export async function POST(req: NextRequest) {
           values: texts,
         });
         embeddings = result.embeddings;
-        embeddingsGenerated = true;
+        embeddingsEnabled = true;
       } catch (e) {
-        console.warn("[crawl] embedMany failed — saving without embeddings (keyword search will still work):", e);
+        console.warn("[crawl] embedMany failed — keyword search still works:", e);
       }
     }
 
@@ -229,40 +256,32 @@ export async function POST(req: NextRequest) {
     }));
 
     const { error } = await supabase.from("knowledge_base").insert(rows);
-    if (error) {
-      console.error("[crawl] insert error:", error.message);
-    } else {
-      totalInserted += rows.length;
-    }
+    if (error) console.error("[crawl] insert error:", error.message);
+    else totalInserted += rows.length;
   }
 
   return NextResponse.json({
-    success:            true,
-    domain:             origin,
-    pages:              allText.length,
-    chunks:             totalInserted,
-    replaced:           replace,
-    embeddingsEnabled:  embeddingsGenerated,
-    searchMode:         embeddingsGenerated ? "vector+keyword" : "keyword",
+    success:          true,
+    domain:           origin,
+    pages:            allText.length,
+    chunks:           totalInserted,
+    replaced:         replace,
+    searchMode:       embeddingsEnabled ? "vector+keyword" : "keyword",
   });
 }
 
-// ── GET /api/crawl?domain=… — list crawled domains ───────────────────────────
+// ── GET /api/crawl — list crawled domains ─────────────────────────────────────
 export async function GET(req: NextRequest) {
   const accountId = req.nextUrl.searchParams.get("accountId") ?? "demo";
-
   const { data } = await supabase
     .from("knowledge_base")
     .select("source")
     .eq("account_id", accountId)
     .not("source", "is", null);
 
-  // Deduplicate to unique origins
   const domains = [...new Set(
     (data ?? [])
-      .map((r) => {
-        try { return new URL(r.source).origin; } catch { return null; }
-      })
+      .map((r) => { try { return new URL(r.source).origin; } catch { return null; } })
       .filter(Boolean)
   )];
 
