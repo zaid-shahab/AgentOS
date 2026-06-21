@@ -1069,14 +1069,14 @@ export default function CommandCenter() {
               color={widgetColor}       onColor={setWidgetColor}
               greeting={widgetGreeting} onGreeting={setWidgetGreeting}
               copied={widgetCopied}     onCopy={() => {
-                const origin = typeof window !== "undefined" ? window.location.origin : "https://your-app.vercel.app";
+                // onCopy only fires on click — window is always defined here
                 const params = new URLSearchParams({
                   accountId: "demo",
                   botName:   widgetBotName,
                   color:     widgetColor,
                   greeting:  widgetGreeting,
                 });
-                const src = `${origin}/widget?${params.toString()}`;
+                const src = `${window.location.origin}/widget?${params.toString()}`;
                 const snippet = buildSnippet(src, widgetColor);
                 navigator.clipboard.writeText(snippet).then(() => {
                   setWidgetCopied(true);
@@ -1142,7 +1142,10 @@ type EmbedPanelProps = {
 const PRESET_COLORS = ["#22d3ee", "#ff7a18", "#b06bff", "#34e29b", "#f59e0b", "#ef4444"];
 
 function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, copied, onCopy }: EmbedPanelProps) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  // ── Fix hydration mismatch: window.location.origin must only be read client-side ──
+  const [origin, setOrigin] = useState("");
+  useEffect(() => { setOrigin(window.location.origin); }, []);
+
   const params = new URLSearchParams({ accountId: "demo", botName, color, greeting });
   const widgetSrc = origin ? `${origin}/widget?${params.toString()}` : "";
   const snippet = widgetSrc ? buildSnippet(widgetSrc, color) : "";
@@ -1171,7 +1174,7 @@ function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, 
         </a>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, padding: "0 28px 28px", minHeight: 0 }}>
+      <div className="of-embed-grid">
 
         {/* ── Left: config ──────────────────────────────────────────────────── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -1237,17 +1240,9 @@ function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, 
           </div>
 
           {/* Instructions */}
-          <div style={{
-            background: "rgba(34,211,238,0.06)",
-            border: "1px solid rgba(34,211,238,0.2)",
-            borderRadius: 12,
-            padding: "14px 16px",
-            fontSize: 12.5,
-            lineHeight: 1.65,
-            color: "var(--ink-2)",
-          }}>
-            <div style={{ fontWeight: 600, marginBottom: 6, color: "#22d3ee" }}>How to use</div>
-            <ol style={{ paddingLeft: 16, display: "flex", flexDirection: "column", gap: 5 }}>
+          <div className="of-embed-howto">
+            <div className="of-embed-howto-title">How to use</div>
+            <ol>
               <li>Add content to your <b>Knowledge Base</b> tab (upload a PDF, DOCX, or paste FAQs)</li>
               <li>Configure the widget name and colour above</li>
               <li>Copy the snippet below and paste it before <code style={{ background: "rgba(255,255,255,.06)", borderRadius: 4, padding: "1px 5px" }}>&lt;/body&gt;</code> on your site</li>
@@ -1260,38 +1255,15 @@ function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <span className="of-field-lbl">Live preview</span>
           {widgetSrc ? (
-            <div style={{
-              position: "relative",
-              flex: 1,
-              minHeight: 500,
-              background: "rgba(255,255,255,0.02)",
-              border: "1px solid rgba(255,255,255,0.07)",
-              borderRadius: 16,
-              overflow: "hidden",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}>
+            <div className="of-embed-browser">
               {/* Faux browser chrome */}
-              <div style={{
-                position: "absolute", top: 0, left: 0, right: 0,
-                height: 36, background: "rgba(0,0,0,0.25)",
-                display: "flex", alignItems: "center", gap: 6, padding: "0 12px",
-                borderBottom: "1px solid rgba(255,255,255,0.05)",
-              }}>
+              <div className="of-embed-browser-bar">
                 {["#ef4444","#f59e0b","#34e29b"].map((c) => (
-                  <span key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: .7 }} />
+                  <span key={c} className="of-embed-browser-dot" style={{ background: c }} />
                 ))}
-                <span style={{
-                  flex: 1, marginLeft: 6, height: 18, borderRadius: 6,
-                  background: "rgba(255,255,255,0.06)",
-                  fontSize: 10, color: "rgba(255,255,255,.3)",
-                  display: "flex", alignItems: "center", padding: "0 8px",
-                }}>
-                  yourwebsite.com
-                </span>
+                <span className="of-embed-browser-url">yourwebsite.com</span>
               </div>
-              {/* Embedded widget */}
+              {/* Live widget iframe */}
               <iframe
                 key={widgetSrc}
                 src={widgetSrc}
@@ -1313,7 +1285,7 @@ function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, 
       </div>
 
       {/* ── Snippet block ──────────────────────────────────────────────────── */}
-      <div style={{ padding: "0 28px 32px" }}>
+      <div className="of-embed-snippet-wrap">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <span className="of-field-lbl" style={{ marginBottom: 0 }}>Embed snippet</span>
           <button
@@ -1325,21 +1297,7 @@ function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, 
             {copied ? "Copied!" : "Copy snippet"}
           </button>
         </div>
-        <pre style={{
-          background: "rgba(0,0,0,0.35)",
-          border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 12,
-          padding: "16px 18px",
-          fontSize: 11.5,
-          lineHeight: 1.6,
-          overflowX: "auto",
-          color: "#8ee3ef",
-          fontFamily: "var(--font-m)",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-all",
-          maxHeight: 260,
-          overflowY: "auto",
-        }}>
+        <pre className="of-snippet-pre">
           {snippet || "Configure your widget above to generate the snippet."}
         </pre>
       </div>

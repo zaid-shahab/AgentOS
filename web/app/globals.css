@@ -656,10 +656,90 @@ body{
 @media (max-width:680px){.lp{padding:0 20px 60px}.lp-caps{grid-template-columns:1fr}.lp-stats{gap:22px}}
 
 /* ── Embed widget tab ──────────────────────────────────────────────────────── */
-.of-embed-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:0 28px 28px}
-.of-snippet-pre{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.07);border-radius:12px;
-  padding:16px 18px;font-size:11.5px;line-height:1.6;overflow-x:auto;color:#8ee3ef;
-  font-family:var(--font-m);white-space:pre-wrap;word-break:break-all;max-height:260px;overflow-y:auto}
-.of-color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;
-  border:2px solid transparent;transition:border .12s,outline .12s}
+/* Two-column on desktop, single-column on tablet/mobile */
+.of-embed-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:24px;
+  padding:0 28px 28px;
+  min-height:0;
+}
+.of-embed-snippet-wrap{padding:0 28px 32px}
+
+/* Snippet code block */
+.of-snippet-pre{
+  background:rgba(0,0,0,.35);
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:12px;
+  padding:16px 18px;
+  font-size:11.5px;
+  line-height:1.6;
+  overflow-x:auto;
+  color:#8ee3ef;
+  font-family:var(--font-m);
+  white-space:pre-wrap;
+  word-break:break-all;
+  max-height:260px;
+  overflow-y:auto;
+}
+
+/* Colour swatch buttons */
+.of-color-swatch{
+  width:28px;height:28px;border-radius:50%;cursor:pointer;
+  border:2px solid transparent;transition:border .12s,outline .12s;
+}
 .of-color-swatch.active{border:2.5px solid #fff;outline-width:3px;outline-style:solid}
+
+/* How-to-use info card */
+.of-embed-howto{
+  background:rgba(34,211,238,.06);
+  border:1px solid rgba(34,211,238,.2);
+  border-radius:12px;
+  padding:14px 16px;
+  font-size:12.5px;
+  line-height:1.65;
+  color:var(--ink-2);
+}
+.of-embed-howto-title{font-weight:600;margin-bottom:6px;color:#22d3ee}
+.of-embed-howto ol{padding-left:16px;display:flex;flex-direction:column;gap:5px}
+
+/* Browser chrome mock inside preview */
+.of-embed-browser{
+  background:rgba(255,255,255,.02);
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:16px;
+  overflow:hidden;
+  flex:1;
+  min-height:460px;
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.of-embed-browser-bar{
+  position:absolute;top:0;left:0;right:0;height:36px;
+  background:rgba(0,0,0,.25);
+  display:flex;align-items:center;gap:6px;padding:0 12px;
+  border-bottom:1px solid rgba(255,255,255,.05);
+}
+.of-embed-browser-dot{width:10px;height:10px;border-radius:50%;opacity:.7}
+.of-embed-browser-url{
+  flex:1;margin-left:6px;height:18px;border-radius:6px;
+  background:rgba(255,255,255,.06);
+  font-size:10px;color:rgba(255,255,255,.3);
+  display:flex;align-items:center;padding:0 8px;
+}
+
+/* ── Responsive breakpoints ───────────────────────────────────────────────── */
+/* Tablet: collapse to 1-col, shrink preview */
+@media (max-width:1100px){
+  .of-embed-grid{grid-template-columns:1fr}
+  .of-embed-browser{min-height:360px}
+}
+/* Mobile: tighter padding */
+@media (max-width:680px){
+  .of-embed-grid{padding:0 14px 20px;gap:16px}
+  .of-embed-snippet-wrap{padding:0 14px 24px}
+  .of-embed-browser{min-height:300px}
+  .of-embed-howto{font-size:12px}
+}
