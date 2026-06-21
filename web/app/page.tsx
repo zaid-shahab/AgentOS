@@ -305,7 +305,7 @@ export default function CommandCenter() {
     }
 
     const recognition = new SR();
-    recognition.lang = "en-US";
+    recognition.lang = "ur-PK";  // Urdu (Pakistan) — also handles Roman Urdu phonetically
     recognition.continuous = true;
     recognition.interimResults = true;
 
