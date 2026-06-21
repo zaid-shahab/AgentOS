@@ -445,7 +445,8 @@ export default function CommandCenter() {
       });
       const data = await res.json();
       if (data.success) {
-        setCrawlMsg({ ok: true, text: `✓ Crawled ${data.pages} pages → ${data.chunks} chunks saved from ${data.domain}` });
+        const mode = data.searchMode === "vector+keyword" ? "vector + keyword search" : "keyword search (add OPENAI_API_KEY for vector search)";
+        setCrawlMsg({ ok: true, text: `✓ Crawled ${data.pages} pages → ${data.chunks} chunks saved from ${data.domain} · ${mode}` });
         setCrawledDomains((d) => [...new Set([...d, data.domain])]);
         setCrawlUrl("");
       } else {

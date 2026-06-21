@@ -200,22 +200,25 @@ export async function POST(req: NextRequest) {
   // ── 4. Embed in batches of 96 (OpenAI limit) ─────────────────────────────
   const BATCH = 96;
   let totalInserted = 0;
+  let embeddingsGenerated = false;
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
   for (let i = 0; i < allChunks.length; i += BATCH) {
     const batch = allChunks.slice(i, i + BATCH);
     const texts  = batch.map((c) => c.content);
 
-    let embeddings: number[][] = [];
-    try {
-      const result = await embedMany({
-        model: openai.embedding("text-embedding-3-small"),
-        values: texts,
-      });
-      embeddings = result.embeddings;
-    } catch (e) {
-      console.error("[crawl] embedMany failed:", e);
-      // Insert without embeddings as fallback (KB keyword search still works)
-      embeddings = texts.map(() => []);
+    let embeddings: number[][] = texts.map(() => []);
+    if (hasOpenAI) {
+      try {
+        const result = await embedMany({
+          model: openai.embedding("text-embedding-3-small"),
+          values: texts,
+        });
+        embeddings = result.embeddings;
+        embeddingsGenerated = true;
+      } catch (e) {
+        console.warn("[crawl] embedMany failed — saving without embeddings (keyword search will still work):", e);
+      }
     }
 
     const rows = batch.map((c, j) => ({
@@ -234,11 +237,13 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
-    success:  true,
-    domain:   origin,
-    pages:    allText.length,
-    chunks:   totalInserted,
-    replaced: replace,
+    success:            true,
+    domain:             origin,
+    pages:              allText.length,
+    chunks:             totalInserted,
+    replaced:           replace,
+    embeddingsEnabled:  embeddingsGenerated,
+    searchMode:         embeddingsGenerated ? "vector+keyword" : "keyword",
   });
 }
 
