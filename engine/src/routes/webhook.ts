@@ -34,17 +34,18 @@ router.get("/meta", (req: Request, res: Response) => {
 router.post("/meta", async (req: Request, res: Response) => {
   if (APP_SECRET && process.env.VERIFY_WEBHOOK_SIGNATURE !== "false" && !verifySignature(req)) return res.sendStatus(401);
 
-  // Acknowledge immediately — Meta expects <5s
-  res.sendStatus(200);
-
   const body = JSON.parse((req.body as Buffer).toString());
   console.log("[webhook] raw payload:", JSON.stringify(body, null, 2));
   console.log("[webhook] object:", body.object, "| entries:", body.entry?.length, "| first entry changes:", JSON.stringify(body.entry?.[0]?.changes), "| first entry messaging:", JSON.stringify(body.entry?.[0]?.messaging));
+
   if (body.object !== "instagram" && body.object !== "page") {
     console.log("[webhook] DROPPED — unexpected object type:", body.object);
-    return;
+    return res.sendStatus(200);
   }
 
+  // Process all events before responding — Vercel serverless kills the function
+  // immediately after res.send(), so all async work must complete first.
+  // Meta allows up to 5 seconds; typical processing takes 2-3s.
   for (const entry of body.entry ?? []) {
     // Messaging array → DMs
     for (const event of entry.messaging ?? []) {
@@ -59,6 +60,9 @@ router.post("/meta", async (req: Request, res: Response) => {
       );
     }
   }
+
+  // Acknowledge after processing completes
+  res.sendStatus(200);
 });
 
 async function processEvent(
