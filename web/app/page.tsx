@@ -1307,6 +1307,8 @@ type CronJob = {
 
 function CronsPanel() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
+  const [deleting, setDeleting] = useState<Set<string>>(new Set());
+  const [clearingAll, setClearingAll] = useState(false);
 
   useEffect(() => {
     fetch("/api/cron?accountId=demo")
@@ -1315,12 +1317,31 @@ function CronsPanel() {
   }, []);
 
   async function deleteJob(id: string) {
-    await fetch("/api/cron", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId: id }),
-    });
-    setJobs((j) => j.filter((x) => x.id !== id));
+    setDeleting((s) => new Set(s).add(id));
+    try {
+      await fetch("/api/cron", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: id }),
+      });
+      setJobs((j) => j.filter((x) => x.id !== id));
+    } finally {
+      setDeleting((s) => { const n = new Set(s); n.delete(id); return n; });
+    }
+  }
+
+  async function clearAll() {
+    setClearingAll(true);
+    try {
+      await fetch("/api/cron", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true, accountId: "demo" }),
+      });
+      setJobs([]);
+    } finally {
+      setClearingAll(false);
+    }
   }
 
   return (
@@ -1329,12 +1350,22 @@ function CronsPanel() {
         <div className="of-iq-orb" style={{ background: "linear-gradient(140deg,var(--c-schedule),#0e9b66)" }}>
           <Icon name="clock" />
         </div>
-        <div>
+        <div style={{ flex: 1 }}>
           <h3>Scheduled Reports</h3>
           <div className="sub">
             Cron-driven digests. Trigger one from the Insights tab — e.g. “email a hot-lead briefing at 9 AM daily.”
           </div>
         </div>
+        {jobs.length > 0 && (
+          <button
+            className="of-card-btn"
+            onClick={clearAll}
+            disabled={clearingAll}
+            style={{ whiteSpace: "nowrap" }}
+          >
+            <Icon name="x" /> {clearingAll ? "Clearing..." : "Clear all"}
+          </button>
+        )}
       </div>
       <div className="of-kb-wrap">
         <div className="of-kb-panel">
@@ -1361,8 +1392,9 @@ function CronsPanel() {
                 className="of-card-btn"
                 style={{ marginLeft: 8 }}
                 onClick={() => deleteJob(job.id)}
+                disabled={deleting.has(job.id)}
               >
-                <Icon name="x" /> Remove
+                <Icon name="x" /> {deleting.has(job.id) ? "Removing..." : "Remove"}
               </button>
             </div>
           ))}
