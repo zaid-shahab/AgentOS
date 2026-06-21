@@ -50,15 +50,13 @@ export async function executeConfig(config: AutomationConfig, ctx: Context): Pro
         });
         return "tag_lead_from_post";
       }
-      const dmText = (action.payload?.message as string) || "Thanks for reaching out!";
+      // If no hardcoded message is configured, use RAG to generate a contextual reply.
+      const hardcoded = (action.payload?.message as string | undefined)?.trim();
+      const dmText = hardcoded || await ragAndReply(ctx.text, ctx.accountId);
       if (ctx.platform === "facebook_comment") {
-        // Facebook comment → private reply API (shows comment context in Messenger).
-        // If commentId is missing for any reason, skip rather than sending a blind cold DM.
         if (!ctx.commentId) return "no_action";
         await facebookPrivateReply(ctx.commentId, dmText);
       } else {
-        // Instagram comment or DM → standard messages API.
-        // Instagram automatically adds "replied because you commented on their post" context.
         await sendDM(ctx.senderId, dmText);
       }
       return "send_dm";
