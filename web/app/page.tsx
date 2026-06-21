@@ -152,6 +152,11 @@ export default function CommandCenter() {
   const [kbUploading, setKbUploading] = useState(false);
   const [kbUploadMsg, setKbUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const kbFileRef = useRef<HTMLInputElement>(null);
+  // ── Website crawl state ────────────────────────────────────────────────────
+  const [crawlUrl,    setCrawlUrl]    = useState("");
+  const [crawlBusy,   setCrawlBusy]  = useState(false);
+  const [crawlMsg,    setCrawlMsg]   = useState<{ ok: boolean; text: string } | null>(null);
+  const [crawledDomains, setCrawledDomains] = useState<string[]>([]);
   // ── Embed widget configurator ──────────────────────────────────────────
   const [widgetBotName, setWidgetBotName]   = useState("Assistant");
   const [widgetColor,   setWidgetColor]     = useState("#22d3ee");
@@ -188,6 +193,14 @@ export default function CommandCenter() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
+  }, []);
+
+  // Load already-crawled domains so they show in the UI on mount
+  useEffect(() => {
+    fetch("/api/crawl?accountId=demo")
+      .then((r) => r.json())
+      .then((d) => { if (d.domains?.length) setCrawledDomains(d.domains); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -417,6 +430,31 @@ export default function CommandCenter() {
       if (data.success) setKbSaved(true);
     } finally {
       setKbSaving(false);
+    }
+  }
+
+  async function handleCrawl() {
+    if (!crawlUrl.trim() || crawlBusy) return;
+    setCrawlBusy(true);
+    setCrawlMsg(null);
+    try {
+      const res = await fetch("/api/crawl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: crawlUrl.trim(), accountId: "demo", replace: true }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCrawlMsg({ ok: true, text: `✓ Crawled ${data.pages} pages → ${data.chunks} chunks saved from ${data.domain}` });
+        setCrawledDomains((d) => [...new Set([...d, data.domain])]);
+        setCrawlUrl("");
+      } else {
+        setCrawlMsg({ ok: false, text: data.error ?? "Crawl failed." });
+      }
+    } catch {
+      setCrawlMsg({ ok: false, text: "Network error. Please try again." });
+    } finally {
+      setCrawlBusy(false);
     }
   }
 
@@ -972,12 +1010,62 @@ export default function CommandCenter() {
                 <div>
                   <h3>Knowledge Base</h3>
                   <div className="sub">
-                    Drop in product info, pricing, FAQs — agents reference this when crafting DM replies.
+                    Crawl your website, upload docs, or paste text — agents and the widget use all of it.
                   </div>
                 </div>
               </div>
               <div className="of-kb-wrap">
                 <div className="of-kb-panel">
+
+                  {/* ── Crawl website ────────────────────────────────────── */}
+                  <div className="of-kb-section-lbl" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Icon name="search" />Crawl website
+                  </div>
+                  <div className="of-kb-crawl-desc">
+                    Enter your website URL — AgentOS will crawl up to 40 pages, extract all product info,
+                    pricing, FAQs, and policies, then make them instantly searchable by the chat widget.
+                  </div>
+                  <div className="of-kb-crawl-row">
+                    <input
+                      className="of-input of-kb-crawl-input"
+                      value={crawlUrl}
+                      onChange={(e) => { setCrawlUrl(e.target.value); setCrawlMsg(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleCrawl(); }}
+                      placeholder="https://yourwebsite.com"
+                      disabled={crawlBusy}
+                    />
+                    <button
+                      className="of-send of-kb-crawl-btn"
+                      onClick={handleCrawl}
+                      disabled={crawlBusy || !crawlUrl.trim()}
+                    >
+                      {crawlBusy
+                        ? <><span className="of-kb-spin" />Crawling…</>
+                        : <><Icon name="search" />Crawl</>}
+                    </button>
+                  </div>
+
+                  {/* Crawl status */}
+                  {crawlMsg && (
+                    <div className="of-kb-crawl-msg" style={{ color: crawlMsg.ok ? "var(--good)" : "var(--bad)" }}>
+                      {crawlMsg.text}
+                    </div>
+                  )}
+
+                  {/* Previously crawled domains */}
+                  {crawledDomains.length > 0 && (
+                    <div className="of-kb-crawled-list">
+                      {crawledDomains.map((d) => (
+                        <div key={d} className="of-kb-crawled-chip">
+                          <Icon name="check" />
+                          <span>{d}</span>
+                          <span className="of-kb-crawled-tag">crawled</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="of-kb-divider" />
 
                   {/* ── Upload document ─────────────────────────────────── */}
                   <div className="of-kb-section-lbl">Upload document</div>
@@ -1150,10 +1238,10 @@ function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, 
   const snippet = widgetSrc ? buildSnippet(widgetSrc, color) : "";
 
   return (
-    <div className="of-canvaswrap insights" style={{ overflow: "auto" }}>
+    <div className="of-embed-root">
 
-      {/* ── Page header ─────────────────────────────────────────────────── */}
-      <div className="of-insights-head">
+      {/* ── Fixed header ─────────────────────────────────────────────────── */}
+      <div className="of-embed-hdr">
         <div className="of-iq-orb" style={{ background: "linear-gradient(140deg,#b06bff,#22d3ee)" }}>
           <Icon name="code" />
         </div>
@@ -1170,109 +1258,113 @@ function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, 
         )}
       </div>
 
-      {/* ── Body: config + preview side-by-side ─────────────────────────── */}
-      <div className="of-embed-body">
+      {/* ── Scrollable content — no overlap possible ─────────────────────── */}
+      <div className="of-embed-scroll">
 
-        {/* Left column */}
-        <div className="of-embed-col">
+        {/* Body: config + preview side-by-side */}
+        <div className="of-embed-body">
 
-          {/* Configure card */}
-          <div className="of-embed-card">
-            <div className="of-embed-card-title">Configure</div>
+          {/* Left column */}
+          <div className="of-embed-col">
 
-            <div className="of-field">
-              <span className="of-field-lbl">Bot name</span>
-              <input className="of-input" value={botName}
-                onChange={(e) => onBotName(e.target.value)}
-                placeholder="e.g. Support Bot" maxLength={32} />
+            {/* Configure card */}
+            <div className="of-embed-card">
+              <div className="of-embed-card-title">Configure</div>
+
+              <div className="of-field">
+                <span className="of-field-lbl">Bot name</span>
+                <input className="of-input" value={botName}
+                  onChange={(e) => onBotName(e.target.value)}
+                  placeholder="e.g. Support Bot" maxLength={32} />
+              </div>
+
+              <div className="of-field">
+                <span className="of-field-lbl">Opening greeting</span>
+                <textarea className="of-textarea" value={greeting}
+                  onChange={(e) => onGreeting(e.target.value)}
+                  placeholder="Hi! How can I help you today?" maxLength={160} />
+              </div>
+
+              <div className="of-field">
+                <span className="of-field-lbl">Accent colour</span>
+                <div className="of-embed-swatches">
+                  {PRESET_COLORS.map((c) => (
+                    <button key={c} onClick={() => onColor(c)} title={c}
+                      className={`of-embed-swatch${color === c ? " active" : ""}`}
+                      style={{ background: c, ["--sw" as string]: c }} />
+                  ))}
+                  <label className="of-embed-custom-color" title="Custom colour">
+                    <input type="color" value={color} onChange={(e) => onColor(e.target.value)} />
+                    <span style={{ background: color }} />
+                  </label>
+                  <span className="of-embed-hex">{color}</span>
+                </div>
+              </div>
             </div>
 
-            <div className="of-field">
-              <span className="of-field-lbl">Opening greeting</span>
-              <textarea className="of-textarea" value={greeting}
-                onChange={(e) => onGreeting(e.target.value)}
-                placeholder="Hi! How can I help you today?" maxLength={160} />
+            {/* Steps card */}
+            <div className="of-embed-steps">
+              {[
+                { n: 1, text: <>Add FAQs/docs to <b>Knowledge Base</b></> },
+                { n: 2, text: <>Configure the widget above</> },
+                { n: 3, text: <>Copy the snippet and paste before <code>&lt;/body&gt;</code></> },
+                { n: 4, text: <>Your bot goes live on your site</> },
+              ].map(({ n, text }) => (
+                <div key={n} className="of-embed-step">
+                  <span className="of-embed-step-n">{n}</span>
+                  <span className="of-embed-step-text">{text}</span>
+                </div>
+              ))}
             </div>
+          </div>
 
-            <div className="of-field">
-              <span className="of-field-lbl">Accent colour</span>
-              <div className="of-embed-swatches">
-                {PRESET_COLORS.map((c) => (
-                  <button key={c} onClick={() => onColor(c)} title={c}
-                    className={`of-embed-swatch${color === c ? " active" : ""}`}
-                    style={{ background: c, ["--sw" as string]: c }} />
-                ))}
-                <label className="of-embed-custom-color" title="Custom colour">
-                  <input type="color" value={color} onChange={(e) => onColor(e.target.value)} />
-                  <span style={{ background: color }} />
-                </label>
-                <span className="of-embed-hex">{color}</span>
+          {/* Right column — live preview */}
+          <div className="of-embed-col">
+            <div className="of-embed-card of-embed-preview-card">
+              <div className="of-embed-card-title">Live preview</div>
+              <div className="of-embed-browser">
+                <div className="of-embed-browser-bar">
+                  {["#ef4444","#f59e0b","#34e29b"].map((c) => (
+                    <span key={c} className="of-embed-browser-dot" style={{ background: c }} />
+                  ))}
+                  <span className="of-embed-browser-url">yourwebsite.com</span>
+                </div>
+                {widgetSrc ? (
+                  <iframe key={widgetSrc} src={widgetSrc} title="Widget preview"
+                    style={{ position: "absolute", top: 36, left: 0, right: 0, bottom: 0,
+                      width: "100%", height: "calc(100% - 36px)", border: "none" }} />
+                ) : (
+                  <div style={{ position: "absolute", inset: 36, display: "flex",
+                    alignItems: "center", justifyContent: "center", color: "var(--ink-3)",
+                    fontSize: 13 }}>Loading…</div>
+                )}
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Steps card */}
-          <div className="of-embed-steps">
-            {[
-              { n: 1, text: <>Add FAQs/docs to <b>Knowledge Base</b></> },
-              { n: 2, text: <>Configure the widget above</> },
-              { n: 3, text: <>Copy the snippet and paste before <code>&lt;/body&gt;</code></> },
-              { n: 4, text: <>Your bot goes live on your site</> },
-            ].map(({ n, text }) => (
-              <div key={n} className="of-embed-step">
-                <span className="of-embed-step-n">{n}</span>
-                <span className="of-embed-step-text">{text}</span>
+        {/* ── Snippet block — always below the grid, never overlapping ────── */}
+        <div className="of-embed-snippet-section">
+          <div className="of-embed-snippet-header">
+            <div>
+              <div className="of-embed-card-title" style={{ marginBottom: 2 }}>Embed snippet</div>
+              <div style={{ fontSize: 12, color: "var(--ink-3)" }}>
+                Paste this before <code style={{ fontFamily: "var(--font-m)", fontSize: 11, background: "rgba(255,255,255,.06)", borderRadius: 4, padding: "1px 6px" }}>&lt;/body&gt;</code> on your website
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right column — live preview */}
-        <div className="of-embed-col">
-          <div className="of-embed-card of-embed-preview-card">
-            <div className="of-embed-card-title">Live preview</div>
-            <div className="of-embed-browser">
-              <div className="of-embed-browser-bar">
-                {["#ef4444","#f59e0b","#34e29b"].map((c) => (
-                  <span key={c} className="of-embed-browser-dot" style={{ background: c }} />
-                ))}
-                <span className="of-embed-browser-url">yourwebsite.com</span>
-              </div>
-              {widgetSrc ? (
-                <iframe key={widgetSrc} src={widgetSrc} title="Widget preview"
-                  style={{ position: "absolute", top: 36, left: 0, right: 0, bottom: 0,
-                    width: "100%", height: "calc(100% - 36px)", border: "none" }} />
-              ) : (
-                <div style={{ position: "absolute", inset: 36, display: "flex",
-                  alignItems: "center", justifyContent: "center", color: "var(--ink-3)",
-                  fontSize: 13 }}>Loading…</div>
-              )}
             </div>
+            <button className="of-embed-copy-btn" onClick={onCopy}
+              style={{ borderColor: copied ? "var(--good)" : "rgba(255,255,255,.12)",
+                color: copied ? "var(--good)" : "var(--ink-1)" }}>
+              <Icon name={copied ? "check" : "copy"} />
+              {copied ? "Copied!" : "Copy snippet"}
+            </button>
           </div>
+          <pre className="of-snippet-pre">
+            {snippet || "// Configure your widget above to generate the snippet."}
+          </pre>
         </div>
-      </div>
 
-      {/* ── Snippet block ────────────────────────────────────────────────── */}
-      <div className="of-embed-snippet-section">
-        <div className="of-embed-snippet-header">
-          <div>
-            <div className="of-embed-card-title" style={{ marginBottom: 2 }}>Embed snippet</div>
-            <div style={{ fontSize: 12, color: "var(--ink-3)" }}>
-              Paste this before <code style={{ fontFamily: "var(--font-m)", fontSize: 11, background: "rgba(255,255,255,.06)", borderRadius: 4, padding: "1px 6px" }}>&lt;/body&gt;</code> on your website
-            </div>
-          </div>
-          <button className="of-embed-copy-btn" onClick={onCopy}
-            style={{ borderColor: copied ? "var(--good)" : "rgba(255,255,255,.12)",
-              color: copied ? "var(--good)" : "var(--ink-1)" }}>
-            <Icon name={copied ? "check" : "copy"} />
-            {copied ? "Copied!" : "Copy snippet"}
-          </button>
-        </div>
-        <pre className="of-snippet-pre">
-          {snippet || "// Configure your widget above to generate the snippet."}
-        </pre>
-      </div>
-
+      </div>{/* end .of-embed-scroll */}
     </div>
   );
 }

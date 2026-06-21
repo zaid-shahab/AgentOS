@@ -456,6 +456,54 @@ body{
 .of-kb-dropzone svg{width:22px;height:22px;opacity:.5}
 .of-kb-dropzone:hover{border-color:rgba(var(--accent-rgb),.5);background:rgba(var(--accent-rgb),.04)}
 
+/* ── Website crawl UI ─────────────────────────────────────────────────────── */
+.of-kb-crawl-desc{
+  font-size:12.5px;color:var(--ink-2);line-height:1.6;
+  background:rgba(255,255,255,.025);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:10px;
+  padding:11px 14px;
+}
+.of-kb-crawl-row{display:flex;gap:10px;align-items:stretch}
+.of-kb-crawl-input{flex:1;height:42px}
+.of-kb-crawl-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  height:42px;padding:0 20px;border-radius:12px;
+  flex-shrink:0;white-space:nowrap;font-size:13.5px;
+}
+.of-kb-crawl-msg{
+  font-size:12.5px;line-height:1.55;
+  padding:9px 13px;
+  background:rgba(255,255,255,.025);
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,.06);
+}
+/* spinning loader for crawl button */
+.of-kb-spin{
+  width:14px;height:14px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.25);
+  border-top-color:#fff;
+  animation:ofspin .7s linear infinite;
+  flex-shrink:0;
+}
+/* crawled domain chips */
+.of-kb-crawled-list{display:flex;flex-direction:column;gap:6px}
+.of-kb-crawled-chip{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 12px;
+  border-radius:9px;
+  background:rgba(52,226,155,.06);
+  border:1px solid rgba(52,226,155,.18);
+  font-size:12.5px;color:var(--ink-1);
+}
+.of-kb-crawled-chip svg{width:13px;height:13px;color:var(--good);flex-shrink:0}
+.of-kb-crawled-chip span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-m)}
+.of-kb-crawled-tag{
+  font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--good);background:rgba(52,226,155,.12);
+  border-radius:5px;padding:2px 7px;flex-shrink:0;
+}
+
 /* prefers reduced motion */
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important}}
 
@@ -657,13 +705,44 @@ body{
 
 /* ── Embed widget tab — clean minimal redesign ────────────────────────────── */
 
+/* Root shell: fills the main column, clips then hands scroll to .of-embed-scroll */
+.of-embed-root{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  min-width:0;
+  overflow:hidden;
+}
+
+/* Fixed header row */
+.of-embed-hdr{
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:16px 24px;
+  border-bottom:1px solid var(--line-2);
+}
+.of-embed-hdr h3{font-family:var(--font-d);font-weight:600;color:var(--ink-0);font-size:16px;margin:0;line-height:1.1}
+.of-embed-hdr .sub{color:var(--ink-3);font-size:12px;margin-top:3px}
+
+/* Scrollable content area — everything below the header */
+.of-embed-scroll{
+  flex:1;
+  overflow-y:auto;
+  min-height:0;
+  padding-bottom:48px;
+}
+.of-embed-scroll::-webkit-scrollbar{width:6px}
+.of-embed-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:6px}
+
 /* Main body: 2-col grid */
 .of-embed-body{
   display:grid;
   grid-template-columns:360px 1fr;
   gap:20px;
-  padding:0 24px 20px;
-  min-height:0;
+  padding:24px 24px 0;
 }
 .of-embed-col{display:flex;flex-direction:column;gap:16px}
 
@@ -774,7 +853,7 @@ body{
 }
 
 /* Snippet section */
-.of-embed-snippet-section{padding:0 24px 28px}
+.of-embed-snippet-section{padding:24px 24px 28px}
 .of-embed-snippet-header{
   display:flex;align-items:center;justify-content:space-between;
   margin-bottom:12px;gap:16px;
@@ -818,8 +897,9 @@ body{
   .of-embed-browser{min-height:360px}
 }
 @media (max-width:680px){
-  .of-embed-body{padding:0 14px 16px;gap:14px}
-  .of-embed-snippet-section{padding:0 14px 24px}
+  .of-embed-hdr{padding:14px 16px}
+  .of-embed-body{padding:16px 14px 0;gap:14px}
+  .of-embed-snippet-section{padding:16px 14px 24px}
   .of-embed-card{padding:16px;gap:14px}
   .of-embed-browser{min-height:280px}
 }
