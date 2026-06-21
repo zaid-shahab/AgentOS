@@ -1,0 +1,17 @@
+name: Scheduled Reports Trigger
+
+on:
+  schedule:
+    # Runs every 5 minutes — calls /api/cron/run which checks which jobs are due
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # allow manual trigger from GitHub Actions UI
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping cron endpoint
+        run: |
+          curl -sf "${{ secrets.VERCEL_APP_URL }}/api/cron/run" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            || echo "Cron endpoint returned non-2xx (may be no jobs due)"
