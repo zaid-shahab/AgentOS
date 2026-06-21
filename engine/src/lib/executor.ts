@@ -18,6 +18,10 @@ interface Context {
 }
 
 export async function executeConfig(config: AutomationConfig, ctx: Context): Promise<string> {
+  console.log(`[executor] matching — intent_tag:"${ctx.intent_tag}" sentiment:"${ctx.sentiment}" platform:"${ctx.platform}"`);
+  console.log(`[executor] config evaluations:`, JSON.stringify(config.evaluations?.map(e => e.intent_tag)));
+  console.log(`[executor] config actions:`, JSON.stringify(config.actions?.map(a => ({ type: a.type, linked: a.linked_evaluation_id }))));
+
   // Find matching evaluation
   const evaluation = config.evaluations.find((ev) => {
     const lower = ctx.intent_tag.toLowerCase();
@@ -29,6 +33,7 @@ export async function executeConfig(config: AutomationConfig, ctx: Context): Pro
     ? config.actions.find((a) => a.linked_evaluation_id === evaluation.id)
     : config.actions[0];
 
+  console.log(`[executor] matched evaluation:`, evaluation?.intent_tag ?? "none", "| action:", action?.type ?? "none");
   if (!action) return "no_match";
 
   switch (action.type) {
@@ -110,11 +115,17 @@ export async function executeConfig(config: AutomationConfig, ctx: Context): Pro
 }
 
 async function sendDM(recipientId: string, message: string) {
-  await axios.post(`${META_BASE}/me/messages`, {
-    recipient: { id: recipientId },
-    message: { text: message },
-    access_token: PAGE_TOKEN,
-  });
+  try {
+    const res = await axios.post(`${META_BASE}/me/messages`, {
+      recipient: { id: recipientId },
+      message: { text: message },
+      access_token: PAGE_TOKEN,
+    });
+    console.log("[executor] sendDM success:", JSON.stringify(res.data));
+  } catch (err: any) {
+    console.error("[executor] sendDM FAILED:", err?.response?.data ?? err?.message);
+    throw err;
+  }
 }
 
 async function hideComment(commentId: string) {

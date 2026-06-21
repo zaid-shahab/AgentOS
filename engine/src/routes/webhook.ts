@@ -39,7 +39,11 @@ router.post("/meta", async (req: Request, res: Response) => {
 
   const body = JSON.parse((req.body as Buffer).toString());
   console.log("[webhook] raw payload:", JSON.stringify(body, null, 2));
-  if (body.object !== "instagram" && body.object !== "page") return;
+  console.log("[webhook] object:", body.object, "| entries:", body.entry?.length, "| first entry changes:", JSON.stringify(body.entry?.[0]?.changes), "| first entry messaging:", JSON.stringify(body.entry?.[0]?.messaging));
+  if (body.object !== "instagram" && body.object !== "page") {
+    console.log("[webhook] DROPPED — unexpected object type:", body.object);
+    return;
+  }
 
   for (const entry of body.entry ?? []) {
     // Messaging array → DMs
@@ -94,6 +98,7 @@ async function processEvent(
 
   } else {
     // Unrecognised event shape — skip
+    console.log("[webhook] DROPPED event — unrecognised shape. field:", field, "event keys:", Object.keys(event), "value:", JSON.stringify(event.value ?? event).slice(0, 300));
     return;
   }
 
