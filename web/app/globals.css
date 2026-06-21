@@ -654,3 +654,12 @@ body{
   .lp-caps{grid-template-columns:1fr 1fr}
 }
 @media (max-width:680px){.lp{padding:0 20px 60px}.lp-caps{grid-template-columns:1fr}.lp-stats{gap:22px}}
+
+/* ── Embed widget tab ──────────────────────────────────────────────────────── */
+.of-embed-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:0 28px 28px}
+.of-snippet-pre{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.07);border-radius:12px;
+  padding:16px 18px;font-size:11.5px;line-height:1.6;overflow-x:auto;color:#8ee3ef;
+  font-family:var(--font-m);white-space:pre-wrap;word-break:break-all;max-height:260px;overflow-y:auto}
+.of-color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;
+  border:2px solid transparent;transition:border .12s,outline .12s}
+.of-color-swatch.active{border:2.5px solid #fff;outline-width:3px;outline-style:solid}

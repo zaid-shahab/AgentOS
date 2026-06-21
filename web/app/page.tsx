@@ -7,7 +7,7 @@ import Icon from "@/components/Icon";
 import Landing from "@/components/Landing";
 import type { GraphNode, GraphEdge } from "@/lib/schema";
 
-type Tab = "home" | "architect" | "insights" | "knowledge" | "crons";
+type Tab = "home" | "architect" | "insights" | "knowledge" | "crons" | "embed";
 type RenderAs = "text" | "table" | "bar_chart" | "line_chart";
 type Message = {
   role: "user" | "assistant";
@@ -23,6 +23,7 @@ const NAV: { id: Tab; icon: string; label: string }[] = [
   { id: "insights",  icon: "database", label: "Database / Insights" },
   { id: "knowledge", icon: "book",     label: "Knowledge Base" },
   { id: "crons",     icon: "clock",    label: "Scheduled Reports" },
+  { id: "embed",     icon: "code",     label: "Website Widget" },
 ];
 
 type OrchMsg = { role: "user" | "assistant"; content: string };
@@ -151,6 +152,12 @@ export default function CommandCenter() {
   const [kbUploading, setKbUploading] = useState(false);
   const [kbUploadMsg, setKbUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const kbFileRef = useRef<HTMLInputElement>(null);
+  // ── Embed widget configurator ──────────────────────────────────────────
+  const [widgetBotName, setWidgetBotName]   = useState("Assistant");
+  const [widgetColor,   setWidgetColor]     = useState("#22d3ee");
+  const [widgetGreeting, setWidgetGreeting] = useState("Hi! How can I help you today?");
+  const [widgetCopied,  setWidgetCopied]   = useState(false);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop(): void } | null>(null);
   const voiceTargetRef = useRef<"architect" | "insights" | null>(null);
@@ -1055,9 +1062,288 @@ export default function CommandCenter() {
           )}
 
           {tab === "crons" && <CronsPanel />}
+
+          {tab === "embed" && (
+            <EmbedPanel
+              botName={widgetBotName}   onBotName={setWidgetBotName}
+              color={widgetColor}       onColor={setWidgetColor}
+              greeting={widgetGreeting} onGreeting={setWidgetGreeting}
+              copied={widgetCopied}     onCopy={() => {
+                const origin = typeof window !== "undefined" ? window.location.origin : "https://your-app.vercel.app";
+                const params = new URLSearchParams({
+                  accountId: "demo",
+                  botName:   widgetBotName,
+                  color:     widgetColor,
+                  greeting:  widgetGreeting,
+                });
+                const src = `${origin}/widget?${params.toString()}`;
+                const snippet = buildSnippet(src, widgetColor);
+                navigator.clipboard.writeText(snippet).then(() => {
+                  setWidgetCopied(true);
+                  setTimeout(() => setWidgetCopied(false), 2200);
+                });
+              }}
+            />
+          )}
         </div>
       </div>
     </>
+  );
+}
+
+// ── Snippet builder (pure function, used by EmbedPanel + copy handler) ────────
+function buildSnippet(src: string, color: string) {
+  return `<!-- AgentOS Chat Widget — paste before </body> -->
+<script>
+(function(d){
+  var color="${color}";
+  // ── Chat iframe ──────────────────────────────────────────────────────
+  var frame=d.createElement("iframe");
+  frame.src="${src}";
+  frame.id="agentos-widget-frame";
+  frame.allow="microphone";
+  frame.style.cssText="position:fixed;bottom:96px;right:24px;width:390px;height:580px;border:none;border-radius:20px;z-index:2147483646;box-shadow:0 12px 56px rgba(0,0,0,.45);display:none;transition:opacity .2s,transform .2s;transform:scale(.97);opacity:0;";
+  d.body.appendChild(frame);
+
+  // ── Toggle button ────────────────────────────────────────────────────
+  var btn=d.createElement("button");
+  btn.id="agentos-widget-btn";
+  btn.style.cssText="position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:"+color+";border:none;cursor:pointer;z-index:2147483647;box-shadow:0 4px 20px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;transition:transform .15s;";
+  btn.setAttribute("aria-label","Open chat");
+  btn.innerHTML='<svg width=\\"26\\" height=\\"26\\" viewBox=\\"0 0 24 24\\" fill=\\"none\\" stroke=\\"white\\" stroke-width=\\"2\\" stroke-linecap=\\"round\\" stroke-linejoin=\\"round\\"><path d=\\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\\"/></svg>';
+  d.body.appendChild(btn);
+
+  var open=false;
+  btn.addEventListener("click",function(){
+    open=!open;
+    if(open){
+      frame.style.display="block";
+      setTimeout(function(){frame.style.opacity="1";frame.style.transform="scale(1)";},10);
+      btn.innerHTML='<svg width=\\"22\\" height=\\"22\\" viewBox=\\"0 0 24 24\\" fill=\\"none\\" stroke=\\"white\\" stroke-width=\\"2.5\\" stroke-linecap=\\"round\\"><path d=\\"M18 6 6 18\\"/><path d=\\"M6 6l12 12\\"/></svg>';
+    } else {
+      frame.style.opacity="0";frame.style.transform="scale(.97)";
+      setTimeout(function(){frame.style.display="none";},200);
+      btn.innerHTML='<svg width=\\"26\\" height=\\"26\\" viewBox=\\"0 0 24 24\\" fill=\\"none\\" stroke=\\"white\\" stroke-width=\\"2\\" stroke-linecap=\\"round\\" stroke-linejoin=\\"round\\"><path d=\\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\\"/></svg>';
+    }
+    btn.style.transform=open?"scale(.9)":"scale(1)";
+    setTimeout(function(){btn.style.transform="scale(1)";},150);
+  });
+})(document);
+</script>`;
+}
+
+// ── Embed Panel Component ─────────────────────────────────────────────────────
+type EmbedPanelProps = {
+  botName: string;   onBotName: (v: string) => void;
+  color: string;     onColor: (v: string) => void;
+  greeting: string;  onGreeting: (v: string) => void;
+  copied: boolean;   onCopy: () => void;
+};
+const PRESET_COLORS = ["#22d3ee", "#ff7a18", "#b06bff", "#34e29b", "#f59e0b", "#ef4444"];
+
+function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, copied, onCopy }: EmbedPanelProps) {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const params = new URLSearchParams({ accountId: "demo", botName, color, greeting });
+  const widgetSrc = origin ? `${origin}/widget?${params.toString()}` : "";
+  const snippet = widgetSrc ? buildSnippet(widgetSrc, color) : "";
+
+  return (
+    <div className="of-canvaswrap insights" style={{ overflow: "auto" }}>
+      <div className="of-insights-head">
+        <div className="of-iq-orb" style={{ background: "linear-gradient(140deg,#b06bff,#22d3ee)" }}>
+          <Icon name="code" />
+        </div>
+        <div>
+          <h3>Website Widget</h3>
+          <div className="sub">
+            Embed an informational chat widget on any website — it answers questions using your Knowledge Base.
+          </div>
+        </div>
+        <div className="of-spacer" />
+        <a
+          href={widgetSrc}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="of-ghost"
+          style={{ display: "flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 12.5 }}
+        >
+          <Icon name="externalLink" />Preview
+        </a>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, padding: "0 28px 28px", minHeight: 0 }}>
+
+        {/* ── Left: config ──────────────────────────────────────────────────── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+          {/* Bot name */}
+          <div className="of-field">
+            <span className="of-field-lbl">Bot name</span>
+            <input
+              className="of-input"
+              value={botName}
+              onChange={(e) => onBotName(e.target.value)}
+              placeholder="e.g. Support Bot"
+              maxLength={32}
+            />
+          </div>
+
+          {/* Greeting */}
+          <div className="of-field">
+            <span className="of-field-lbl">Opening greeting</span>
+            <textarea
+              className="of-textarea"
+              value={greeting}
+              onChange={(e) => onGreeting(e.target.value)}
+              placeholder="Hi! How can I help you today?"
+              maxLength={160}
+            />
+          </div>
+
+          {/* Accent colour */}
+          <div className="of-field">
+            <span className="of-field-lbl">Accent colour</span>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => onColor(c)}
+                  title={c}
+                  style={{
+                    width: 28, height: 28, borderRadius: "50%",
+                    background: c,
+                    border: color === c ? "2.5px solid #fff" : "2px solid transparent",
+                    cursor: "pointer",
+                    outline: color === c ? `3px solid ${c}55` : "none",
+                    transition: "border .12s,outline .12s",
+                  }}
+                />
+              ))}
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => onColor(e.target.value)}
+                title="Custom colour"
+                style={{
+                  width: 28, height: 28, borderRadius: "50%",
+                  border: "1.5px solid rgba(255,255,255,0.15)",
+                  background: "transparent",
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              />
+              <span style={{ fontSize: 12, opacity: 0.5, fontFamily: "var(--font-m)" }}>{color}</span>
+            </div>
+          </div>
+
+          {/* Instructions */}
+          <div style={{
+            background: "rgba(34,211,238,0.06)",
+            border: "1px solid rgba(34,211,238,0.2)",
+            borderRadius: 12,
+            padding: "14px 16px",
+            fontSize: 12.5,
+            lineHeight: 1.65,
+            color: "var(--ink-2)",
+          }}>
+            <div style={{ fontWeight: 600, marginBottom: 6, color: "#22d3ee" }}>How to use</div>
+            <ol style={{ paddingLeft: 16, display: "flex", flexDirection: "column", gap: 5 }}>
+              <li>Add content to your <b>Knowledge Base</b> tab (upload a PDF, DOCX, or paste FAQs)</li>
+              <li>Configure the widget name and colour above</li>
+              <li>Copy the snippet below and paste it before <code style={{ background: "rgba(255,255,255,.06)", borderRadius: 4, padding: "1px 5px" }}>&lt;/body&gt;</code> on your site</li>
+              <li>The bot will automatically answer questions using your KB</li>
+            </ol>
+          </div>
+        </div>
+
+        {/* ── Right: live preview ─────────────────────────────────────────── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <span className="of-field-lbl">Live preview</span>
+          {widgetSrc ? (
+            <div style={{
+              position: "relative",
+              flex: 1,
+              minHeight: 500,
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid rgba(255,255,255,0.07)",
+              borderRadius: 16,
+              overflow: "hidden",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}>
+              {/* Faux browser chrome */}
+              <div style={{
+                position: "absolute", top: 0, left: 0, right: 0,
+                height: 36, background: "rgba(0,0,0,0.25)",
+                display: "flex", alignItems: "center", gap: 6, padding: "0 12px",
+                borderBottom: "1px solid rgba(255,255,255,0.05)",
+              }}>
+                {["#ef4444","#f59e0b","#34e29b"].map((c) => (
+                  <span key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: .7 }} />
+                ))}
+                <span style={{
+                  flex: 1, marginLeft: 6, height: 18, borderRadius: 6,
+                  background: "rgba(255,255,255,0.06)",
+                  fontSize: 10, color: "rgba(255,255,255,.3)",
+                  display: "flex", alignItems: "center", padding: "0 8px",
+                }}>
+                  yourwebsite.com
+                </span>
+              </div>
+              {/* Embedded widget */}
+              <iframe
+                key={widgetSrc}
+                src={widgetSrc}
+                style={{
+                  position: "absolute", top: 36, left: 0, right: 0, bottom: 0,
+                  width: "100%", height: "calc(100% - 36px)",
+                  border: "none",
+                }}
+                title="Widget preview"
+              />
+            </div>
+          ) : (
+            <div className="of-placeholder" style={{ flex: 1, minHeight: 200 }}>
+              <div className="ring"><Icon name="code" /></div>
+              <p>Preview will appear here</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Snippet block ──────────────────────────────────────────────────── */}
+      <div style={{ padding: "0 28px 32px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <span className="of-field-lbl" style={{ marginBottom: 0 }}>Embed snippet</span>
+          <button
+            className="of-btn-solid"
+            style={{ gap: 7, fontSize: 12.5, padding: "7px 16px" }}
+            onClick={onCopy}
+          >
+            <Icon name={copied ? "check" : "copy"} />
+            {copied ? "Copied!" : "Copy snippet"}
+          </button>
+        </div>
+        <pre style={{
+          background: "rgba(0,0,0,0.35)",
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 12,
+          padding: "16px 18px",
+          fontSize: 11.5,
+          lineHeight: 1.6,
+          overflowX: "auto",
+          color: "#8ee3ef",
+          fontFamily: "var(--font-m)",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-all",
+          maxHeight: 260,
+          overflowY: "auto",
+        }}>
+          {snippet || "Configure your widget above to generate the snippet."}
+        </pre>
+      </div>
+    </div>
   );
 }
 

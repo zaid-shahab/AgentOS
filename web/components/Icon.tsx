@@ -6,7 +6,7 @@ type IconName =
   | "instagram" | "messenger" | "branch" | "message" | "messageCircle" | "userplus" | "shield"
   | "clock" | "mail" | "sparkles" | "search" | "activity" | "check"
   | "x" | "play" | "bot" | "chevron" | "zap" | "download" | "image"
-  | "tag" | "bell" | "slash" | "book" | "upload" | "file";
+  | "tag" | "bell" | "slash" | "book" | "upload" | "file" | "code" | "copy" | "externalLink";
 
 type SvgProps = SVGProps<SVGSVGElement>;
 const baseProps = (extra: SvgProps = {}): SvgProps => ({
@@ -176,6 +176,23 @@ const ICONS: Record<IconName, (p: SvgProps) => JSX.Element> = {
     <svg {...baseProps(p)}>
       <path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z" />
       <path d="M4 17a3 3 0 0 1 3-3h12" />
+    </svg>
+  ),
+  code: (p) => (
+    <svg {...baseProps(p)}>
+      <path d="M8 3 3 12l5 9" /><path d="M16 3l5 9-5 9" />
+    </svg>
+  ),
+  copy: (p) => (
+    <svg {...baseProps(p)}>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  ),
+  externalLink: (p) => (
+    <svg {...baseProps(p)}>
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <path d="M15 3h6v6" /><path d="M10 14 21 3" />
     </svg>
   ),
 };
