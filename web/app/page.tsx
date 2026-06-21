@@ -150,6 +150,8 @@ export default function CommandCenter() {
   const [kbFile, setKbFile] = useState<File | null>(null);
   const [kbUploading, setKbUploading] = useState(false);
   const [kbUploadMsg, setKbUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [kbChunks, setKbChunks] = useState<{ id: string; content: string; source: string | null; created_at: string }[]>([]);
+  const [kbLoading, setKbLoading] = useState(false);
   const kbFileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop(): void } | null>(null);
@@ -191,6 +193,10 @@ export default function CommandCenter() {
     orchMsgsLengthRef.current = orchMsgs.length;
     orchEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [orchMsgs, orchBusy]);
+
+  useEffect(() => {
+    if (tab === "knowledge") fetchKbChunks();
+  }, [tab]);
 
   // ── Orchestrator: build the actual flow from the accumulated description ───
   async function runOrchBuild(description: string) {
@@ -396,6 +402,17 @@ export default function CommandCenter() {
     }
   }
 
+  async function fetchKbChunks() {
+    setKbLoading(true);
+    try {
+      const res = await fetch("/api/knowledge?accountId=demo");
+      const data = await res.json();
+      setKbChunks(data.chunks ?? []);
+    } finally {
+      setKbLoading(false);
+    }
+  }
+
   async function handleSaveKb() {
     if (!kbText.trim() || kbSaving) return;
     setKbSaving(true);
@@ -407,7 +424,7 @@ export default function CommandCenter() {
         body: JSON.stringify({ text: kbText }),
       });
       const data = await res.json();
-      if (data.success) setKbSaved(true);
+      if (data.success) { setKbSaved(true); setKbText(""); fetchKbChunks(); }
     } finally {
       setKbSaving(false);
     }
@@ -426,6 +443,7 @@ export default function CommandCenter() {
         setKbUploadMsg({ ok: true, text: `Parsed ${data.chunks} chunks from "${data.filename}"` });
         setKbFile(null);
         if (kbFileRef.current) kbFileRef.current.value = "";
+        fetchKbChunks();
       } else {
         setKbUploadMsg({ ok: false, text: data.error ?? "Upload failed." });
       }
@@ -434,6 +452,15 @@ export default function CommandCenter() {
     } finally {
       setKbUploading(false);
     }
+  }
+
+  async function handleDeleteKbChunk(id: string) {
+    await fetch("/api/knowledge", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    setKbChunks((c) => c.filter((x) => x.id !== id));
   }
 
   const status =
@@ -1050,6 +1077,48 @@ export default function CommandCenter() {
                   </div>
 
                 </div>
+
+                {/* ── Saved chunks list ───────────────────────────────── */}
+                <div className="of-kb-divider" />
+                <div className="of-kb-section-lbl">
+                  Saved knowledge ({kbChunks.length} chunk{kbChunks.length !== 1 ? "s" : ""})
+                </div>
+                {kbLoading && <div style={{ opacity: 0.5, fontSize: 13, padding: "8px 0" }}>Loading…</div>}
+                {!kbLoading && kbChunks.length === 0 && (
+                  <div style={{ opacity: 0.4, fontSize: 13, padding: "8px 0" }}>No knowledge saved yet.</div>
+                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                  {kbChunks.map((chunk) => (
+                    <div key={chunk.id} style={{
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: 10,
+                      padding: "10px 14px",
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "flex-start",
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {chunk.source && (
+                          <div style={{ fontSize: 11, opacity: 0.5, marginBottom: 4 }}>
+                            <Icon name="file" /> {chunk.source}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                          {chunk.content.length > 200 ? chunk.content.slice(0, 200) + "…" : chunk.content}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteKbChunk(chunk.id)}
+                        style={{ background: "none", border: "none", cursor: "pointer", opacity: 0.4, color: "var(--bad, #f55)", padding: 4, flexShrink: 0 }}
+                        title="Delete chunk"
+                      >
+                        <Icon name="x" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
               </div>
             </div>
           )}
