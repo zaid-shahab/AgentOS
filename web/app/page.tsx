@@ -152,6 +152,9 @@ export default function CommandCenter() {
   const [kbUploadMsg, setKbUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [kbChunks, setKbChunks] = useState<{ id: string; content: string; source: string | null; created_at: string }[]>([]);
   const [kbLoading, setKbLoading] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<{ id: string; title: string; body: string; created_at: string }[]>([]);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const kbFileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop(): void } | null>(null);
@@ -197,6 +200,28 @@ export default function CommandCenter() {
   useEffect(() => {
     if (tab === "knowledge") fetchKbChunks();
   }, [tab]);
+
+  // Load persisted read IDs from localStorage
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("notif_read") || "[]");
+      setReadIds(new Set(stored));
+    } catch {}
+  }, []);
+
+  // Fetch notifications on mount and when panel opens
+  useEffect(() => {
+    fetch("/api/notifications?accountId=demo")
+      .then((r) => r.json())
+      .then((d) => setNotifications(d.notifications ?? []));
+  }, [notifOpen]);
+
+  function markAllRead() {
+    const ids = notifications.map((n) => n.id);
+    const next = new Set([...readIds, ...ids]);
+    setReadIds(next);
+    localStorage.setItem("notif_read", JSON.stringify([...next]));
+  }
 
   // ── Orchestrator: build the actual flow from the accumulated description ───
   async function runOrchBuild(description: string) {
@@ -305,7 +330,7 @@ export default function CommandCenter() {
     }
 
     const recognition = new SR();
-    recognition.lang = "ur-PK";  // Urdu (Pakistan) — also handles Roman Urdu phonetically
+    recognition.lang = "";  // browser default — handles English and Roman Urdu phonetically
     recognition.continuous = true;
     recognition.interimResults = true;
 
@@ -488,9 +513,135 @@ export default function CommandCenter() {
             ))}
           </div>
           <div className="of-rail-foot">
+            {/* Bell */}
+            <button
+              className="of-navbtn"
+              style={{ position: "relative" }}
+              onClick={() => setNotifOpen((o) => !o)}
+              title="Notifications"
+            >
+              <Icon name="bell" />
+              {notifications.filter((n) => !readIds.has(n.id)).length > 0 && (
+                <span style={{
+                  position: "absolute", top: 6, right: 6,
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: "var(--accent)", border: "2px solid var(--bg-0, #0a0a14)",
+                }} />
+              )}
+            </button>
             <div className="of-avatar">AW</div>
           </div>
         </nav>
+
+        {/* ── Notifications panel ──────────────────────────────────── */}
+        {notifOpen && (
+          <>
+            {/* Backdrop */}
+            <div
+              onClick={() => setNotifOpen(false)}
+              style={{
+                position: "fixed", inset: 0, zIndex: 99,
+                background: "rgba(0,0,0,0.4)", backdropFilter: "blur(2px)",
+              }}
+            />
+            {/* Panel */}
+            <div style={{
+              position: "fixed", left: 76, top: 0, bottom: 0,
+              width: 360, zIndex: 100,
+              background: "rgba(14,14,28,0.97)",
+              borderRight: "1px solid rgba(255,255,255,0.08)",
+              display: "flex", flexDirection: "column",
+              boxShadow: "4px 0 32px rgba(0,0,0,0.5)",
+            }}>
+              {/* Header */}
+              <div style={{
+                padding: "20px 20px 14px",
+                borderBottom: "1px solid rgba(255,255,255,0.07)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>Notifications</div>
+                  <div style={{ fontSize: 12, opacity: 0.4, marginTop: 2 }}>
+                    {notifications.filter((n) => !readIds.has(n.id)).length} unread
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {notifications.some((n) => !readIds.has(n.id)) && (
+                    <button
+                      onClick={markAllRead}
+                      style={{
+                        background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 8, padding: "5px 10px", fontSize: 11,
+                        color: "var(--ink-2)", cursor: "pointer",
+                      }}
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setNotifOpen(false)}
+                    style={{ background: "none", border: "none", cursor: "pointer", opacity: 0.4, color: "inherit", padding: 4 }}
+                  >
+                    <Icon name="x" />
+                  </button>
+                </div>
+              </div>
+
+              {/* List */}
+              <div style={{ flex: 1, overflowY: "auto", padding: "10px 12px" }}>
+                {notifications.length === 0 && (
+                  <div style={{ textAlign: "center", opacity: 0.35, paddingTop: 60 }}>
+                    <Icon name="bell" />
+                    <div style={{ marginTop: 12, fontSize: 13 }}>No reports yet</div>
+                    <div style={{ fontSize: 12, marginTop: 4, opacity: 0.7 }}>
+                      Scheduled reports will appear here
+                    </div>
+                  </div>
+                )}
+                {notifications.map((n) => {
+                  const unread = !readIds.has(n.id);
+                  const date = new Date(n.created_at);
+                  const timeStr = date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                  return (
+                    <div
+                      key={n.id}
+                      onClick={() => {
+                        const next = new Set([...readIds, n.id]);
+                        setReadIds(next);
+                        localStorage.setItem("notif_read", JSON.stringify([...next]));
+                      }}
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: 10,
+                        marginBottom: 6,
+                        background: unread ? "rgba(255,122,24,0.06)" : "rgba(255,255,255,0.03)",
+                        border: `1px solid ${unread ? "rgba(255,122,24,0.18)" : "rgba(255,255,255,0.06)"}`,
+                        cursor: "pointer",
+                        transition: "background 0.15s",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                          {unread && (
+                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, marginTop: 1 }} />
+                          )}
+                          <span style={{ fontSize: 13, fontWeight: unread ? 600 : 400 }}>{n.title}</span>
+                        </div>
+                        <span style={{ fontSize: 11, opacity: 0.35, whiteSpace: "nowrap", flexShrink: 0 }}>{timeStr}</span>
+                      </div>
+                      <div style={{
+                        fontSize: 12, opacity: 0.6, marginTop: 6, lineHeight: 1.55,
+                        paddingLeft: unread ? 15 : 0,
+                      }}>
+                        {n.body}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* ── Main column ────────────────────────────────────────── */}
         <div className="of-main">

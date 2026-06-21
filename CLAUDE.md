@@ -73,6 +73,7 @@ Run migrations in order in the Supabase SQL Editor:
 4. `supabase/migrations/004_kb_source.sql` — adds `source` column to `knowledge_base` (tracks filename for uploaded docs)
 5. `supabase/migrations/005_fix_match_knowledge.sql` — fixes `match_knowledge()` to exclude NULL-embedding rows (legacy inserts before vector embeddings were added); sets default match_count to 5
 6. `supabase/migrations/006_ivfflat_lists.sql` — rebuilds ivfflat index with `lists=10` (was 100); index now activates with ≥10 rows instead of ≥100
+7. `supabase/migrations/007_cron_last_run.sql` — adds `last_run_at timestamptz` to `cron_jobs` (used by Vercel Cron to prevent double-firing)
 
 Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifications`, `cron_jobs`
 
@@ -96,6 +97,12 @@ Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifi
 - `web/app/api/cron/route.ts` — cron jobs persisted to Supabase `cron_jobs` table
   - Scheduled Reports tab reads from Supabase (not Redis) so survives Docker restarts
   - DELETE removes from both BullMQ and Supabase
+- `web/app/api/cron/run/route.ts` — **Vercel Cron endpoint** (replaces BullMQ worker for production)
+  - Called every minute via `web/vercel.json` schedule
+  - Uses `cron-parser` to check which jobs are due vs `last_run_at`; marks `last_run_at` immediately to prevent double-firing
+  - Runs report: LLM generates SQL → Supabase executes → Haiku summarises → saves to `notifications` table
+  - Delivers via webhook if `delivery === "webhook"` and `delivery_target` is set
+  - `engine/src/worker.ts` still exists for local dev (`npm run worker`) but is not used in production
 - `web/app/api/knowledge/route.ts` — saves text to `knowledge_base` table with pgvector embeddings
   - **File upload mode**: multipart/form-data with `file` field — parses PDF (`pdf-parse`), DOCX (`mammoth`), TXT/MD/CSV
   - **Text paste mode**: JSON `{ text }` — plain text chunking
@@ -109,6 +116,7 @@ Tables: `automation_configs`, `interactions`, `leads`, `knowledge_base`, `notifi
   - **Clarification mode**: proactively asks for vague trigger specifics (which post?), missing pricing/product data, or unclear reply content — one question at a time
   - **KB save from chat**: if user pastes pricing tables, FAQs, or product data directly in chat, it is extracted into `kb_save`, embedded, and saved to `knowledge_base` automatically; reply confirms storage
   - Returns `{ reply: string }` — frontend interface unchanged
+- `web/app/api/notifications/route.ts` — GET endpoint returning last 50 notifications for an account from the `notifications` table
 
 ## Supported trigger platforms (schema.ts + webhook.ts)
 | Platform value | Source | Webhook field |
@@ -125,6 +133,8 @@ In Meta App Dashboard → Webhooks → Page → subscribe to the **`feed`** fiel
 
 **RAG execution (engine):** `ragAndReply()` in `engine/src/lib/executor.ts` now embeds the query with `text-embedding-3-small` via direct OpenAI HTTP call, then calls the `match_knowledge()` pgvector RPC (top 5 by cosine similarity). Falls back to keyword SELECT if `OPENAI_API_KEY` is missing in engine env.
 
+**send_dm RAG fallback:** In `engine/src/lib/executor.ts`, if a `send_dm` action has no hardcoded `payload.message`, it automatically calls `ragAndReply()` to generate a contextual answer from the knowledge base before sending. Hardcoded message always takes precedence.
+
 **Config preload:** On page load, `web/app/page.tsx` calls `GET /api/build?accountId=demo`. If a saved config exists, nodes/edges are restored to canvas and orchMode flips to "canvas" so the user never sees an empty canvas on restart.
 
 ## UI design system & interaction model (post-redesign)
@@ -139,6 +149,10 @@ In Meta App Dashboard → Webhooks → Page → subscribe to the **`feed`** fiel
   - "Describe the change" box (text or voice) → `web/app/api/edit-node/route.ts` (Claude Haiku, `generateObject`) regenerates just that node's `type/icon/title/subtitle/meta`. Rest of the flow is untouched.
   - Manual field controls (type swatches, title, subtitle, meta, icon) live-edit the node; **Delete node** also drops connected edges.
 - **Voice = push-to-talk.** `handleVoice(target)` in `page.tsx` uses Web Speech API with `continuous + interimResults`; click mic to start, click again to stop. It does NOT auto-submit — the user reviews then hits Send. Targets: `architect` | `insights` | `node`.
+  - `recognition.lang` is set to `""` (browser default) to support both English and Roman Urdu phonetic input. Do not hardcode `en-US` or `ur-PK` — the former blocks Urdu, the latter requires a language pack not installed on most devices.
+- **Insights supports Urdu & Roman Urdu.** The SQL prompt in `web/app/api/insights/route.ts` includes examples of Roman Urdu queries (e.g. "mere insta mein kitne DMs aye") and instructs the LLM to reply in the same language as the question.
+- **Notifications panel.** Bell icon in `of-rail-foot` shows an orange unread badge. Clicking opens a slide-in panel (left: 76px, width: 360px) reading from `/api/notifications`. Read state persisted in `localStorage` under key `notif_read`. This is where scheduled report results appear.
+- **Knowledge Base chunks** are grouped by source file in the UI. Chunks are sorted in document order (ascending `created_at`) and joined into one card per source with a single Remove button that deletes all chunks for that file.
 
 ## Key files — read these first
 | File | What it does |
@@ -151,7 +165,10 @@ In Meta App Dashboard → Webhooks → Page → subscribe to the **`feed`** fiel
 | `web/app/api/edit-node/route.ts` | Regenerate a single node from a plain-language instruction (Claude Haiku) |
 | `web/app/api/insights/route.ts` | Text-to-SQL: question → Claude Haiku → SQL → Supabase |
 | `web/app/api/cron/route.ts` | Natural language → cron expression → BullMQ repeatable job |
-| `web/app/page.tsx` | Command Center: sidebar rail, all tabs, orchestrator chat/canvas state, node inspector |
+| `web/app/api/cron/run/route.ts` | Vercel Cron worker — checks due jobs, runs reports, saves to notifications |
+| `web/app/api/notifications/route.ts` | GET last 50 notifications for an account |
+| `web/vercel.json` | Schedules `/api/cron/run` every minute via Vercel Cron |
+| `web/app/page.tsx` | Command Center: sidebar rail, all tabs, orchestrator chat/canvas state, node inspector, notifications panel |
 | `web/components/NodeCanvas.tsx` | Custom pan/drag/auto-fit canvas, animated bezier edges — DO NOT replace with React Flow |
 | `web/components/AgentNode.tsx` | Single node card; clickable for selection/editing |
 | `web/components/Icon.tsx` | Lucide-style SVG icon set used across the UI |
@@ -198,12 +215,17 @@ Node accent colours are CSS-driven: trigger=cyan, decision=purple, action=orange
 ## Meta webhook flow
 ```
 Meta event → POST /webhook/meta (engine :4000)
-  → verifySignature()
+  → verifySignature()  ← bypassed if VERIFY_WEBHOOK_SIGNATURE=false in env
   → analyzeIntent() via Claude Haiku
   → load AutomationConfig from Supabase
   → executeConfig() → Meta Graph API call
   → log to interactions table
+  → res.sendStatus(200)  ← response sent LAST (Vercel kills function after res.send)
 ```
+
+**Important — Vercel serverless order:** All async processing (sentiment, executor, DB log) must complete **before** calling `res.sendStatus(200)`. In Vercel serverless, sending the response terminates the function immediately. Do not move `res.sendStatus(200)` back to the top.
+
+**Webhook signature bypass:** Set `VERIFY_WEBHOOK_SIGNATURE=false` in engine Vercel env vars to accept unsigned POSTs (useful for custom senders that can't compute HMAC signatures). When unset or `true`, full Meta HMAC-SHA256 verification is enforced.
 
 ## Demo script (rehearse this)
 1. Home tab → product landing; click "Build an agent" → Orchestrator
@@ -212,5 +234,6 @@ Meta event → POST /webhook/meta (engine :4000)
 4. Click **Deploy** → config saved to Supabase under `account_id = "demo"`
 5. DM the test Instagram account live → bot replies in real time
 6. Knowledge Base tab → upload `brand-faq.txt` (or any PDF/DOCX) → chunks stored in Supabase → bot references it when answering DMs with `rag_query` action
-7. Insights tab → type: "How many leads today?" → instant answer
-8. Insights tab → type: "Send me a summary every morning at 9 AM" → cron badge appears
+7. Insights tab → type: "How many leads today?" or in Roman Urdu: "mere insta mein kitne DMs aye?" → instant answer
+8. Insights tab → type: "Send me a summary every morning at 9 AM" → cron badge appears in Scheduled Reports tab
+9. Bell icon (sidebar) → Notifications panel → shows delivered scheduled reports
