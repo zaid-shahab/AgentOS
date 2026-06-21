@@ -1142,7 +1142,6 @@ type EmbedPanelProps = {
 const PRESET_COLORS = ["#22d3ee", "#ff7a18", "#b06bff", "#34e29b", "#f59e0b", "#ef4444"];
 
 function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, copied, onCopy }: EmbedPanelProps) {
-  // ── Fix hydration mismatch: window.location.origin must only be read client-side ──
   const [origin, setOrigin] = useState("");
   useEffect(() => { setOrigin(window.location.origin); }, []);
 
@@ -1152,155 +1151,128 @@ function EmbedPanel({ botName, onBotName, color, onColor, greeting, onGreeting, 
 
   return (
     <div className="of-canvaswrap insights" style={{ overflow: "auto" }}>
+
+      {/* ── Page header ─────────────────────────────────────────────────── */}
       <div className="of-insights-head">
         <div className="of-iq-orb" style={{ background: "linear-gradient(140deg,#b06bff,#22d3ee)" }}>
           <Icon name="code" />
         </div>
         <div>
           <h3>Website Widget</h3>
-          <div className="sub">
-            Embed an informational chat widget on any website — it answers questions using your Knowledge Base.
-          </div>
+          <div className="sub">Configure, preview, and copy your embeddable chat widget.</div>
         </div>
         <div className="of-spacer" />
-        <a
-          href={widgetSrc}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="of-ghost"
-          style={{ display: "flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 12.5 }}
-        >
-          <Icon name="externalLink" />Preview
-        </a>
+        {widgetSrc && (
+          <a href={widgetSrc} target="_blank" rel="noopener noreferrer" className="of-ghost"
+            style={{ display: "flex", alignItems: "center", gap: 6, textDecoration: "none", fontSize: 13 }}>
+            <Icon name="externalLink" />Open widget
+          </a>
+        )}
       </div>
 
-      <div className="of-embed-grid">
+      {/* ── Body: config + preview side-by-side ─────────────────────────── */}
+      <div className="of-embed-body">
 
-        {/* ── Left: config ──────────────────────────────────────────────────── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {/* Left column */}
+        <div className="of-embed-col">
 
-          {/* Bot name */}
-          <div className="of-field">
-            <span className="of-field-lbl">Bot name</span>
-            <input
-              className="of-input"
-              value={botName}
-              onChange={(e) => onBotName(e.target.value)}
-              placeholder="e.g. Support Bot"
-              maxLength={32}
-            />
-          </div>
+          {/* Configure card */}
+          <div className="of-embed-card">
+            <div className="of-embed-card-title">Configure</div>
 
-          {/* Greeting */}
-          <div className="of-field">
-            <span className="of-field-lbl">Opening greeting</span>
-            <textarea
-              className="of-textarea"
-              value={greeting}
-              onChange={(e) => onGreeting(e.target.value)}
-              placeholder="Hi! How can I help you today?"
-              maxLength={160}
-            />
-          </div>
+            <div className="of-field">
+              <span className="of-field-lbl">Bot name</span>
+              <input className="of-input" value={botName}
+                onChange={(e) => onBotName(e.target.value)}
+                placeholder="e.g. Support Bot" maxLength={32} />
+            </div>
 
-          {/* Accent colour */}
-          <div className="of-field">
-            <span className="of-field-lbl">Accent colour</span>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              {PRESET_COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => onColor(c)}
-                  title={c}
-                  style={{
-                    width: 28, height: 28, borderRadius: "50%",
-                    background: c,
-                    border: color === c ? "2.5px solid #fff" : "2px solid transparent",
-                    cursor: "pointer",
-                    outline: color === c ? `3px solid ${c}55` : "none",
-                    transition: "border .12s,outline .12s",
-                  }}
-                />
-              ))}
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => onColor(e.target.value)}
-                title="Custom colour"
-                style={{
-                  width: 28, height: 28, borderRadius: "50%",
-                  border: "1.5px solid rgba(255,255,255,0.15)",
-                  background: "transparent",
-                  cursor: "pointer",
-                  padding: 0,
-                }}
-              />
-              <span style={{ fontSize: 12, opacity: 0.5, fontFamily: "var(--font-m)" }}>{color}</span>
+            <div className="of-field">
+              <span className="of-field-lbl">Opening greeting</span>
+              <textarea className="of-textarea" value={greeting}
+                onChange={(e) => onGreeting(e.target.value)}
+                placeholder="Hi! How can I help you today?" maxLength={160} />
+            </div>
+
+            <div className="of-field">
+              <span className="of-field-lbl">Accent colour</span>
+              <div className="of-embed-swatches">
+                {PRESET_COLORS.map((c) => (
+                  <button key={c} onClick={() => onColor(c)} title={c}
+                    className={`of-embed-swatch${color === c ? " active" : ""}`}
+                    style={{ background: c, ["--sw" as string]: c }} />
+                ))}
+                <label className="of-embed-custom-color" title="Custom colour">
+                  <input type="color" value={color} onChange={(e) => onColor(e.target.value)} />
+                  <span style={{ background: color }} />
+                </label>
+                <span className="of-embed-hex">{color}</span>
+              </div>
             </div>
           </div>
 
-          {/* Instructions */}
-          <div className="of-embed-howto">
-            <div className="of-embed-howto-title">How to use</div>
-            <ol>
-              <li>Add content to your <b>Knowledge Base</b> tab (upload a PDF, DOCX, or paste FAQs)</li>
-              <li>Configure the widget name and colour above</li>
-              <li>Copy the snippet below and paste it before <code style={{ background: "rgba(255,255,255,.06)", borderRadius: 4, padding: "1px 5px" }}>&lt;/body&gt;</code> on your site</li>
-              <li>The bot will automatically answer questions using your KB</li>
-            </ol>
+          {/* Steps card */}
+          <div className="of-embed-steps">
+            {[
+              { n: 1, text: <>Add FAQs/docs to <b>Knowledge Base</b></> },
+              { n: 2, text: <>Configure the widget above</> },
+              { n: 3, text: <>Copy the snippet and paste before <code>&lt;/body&gt;</code></> },
+              { n: 4, text: <>Your bot goes live on your site</> },
+            ].map(({ n, text }) => (
+              <div key={n} className="of-embed-step">
+                <span className="of-embed-step-n">{n}</span>
+                <span className="of-embed-step-text">{text}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* ── Right: live preview ─────────────────────────────────────────── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <span className="of-field-lbl">Live preview</span>
-          {widgetSrc ? (
+        {/* Right column — live preview */}
+        <div className="of-embed-col">
+          <div className="of-embed-card of-embed-preview-card">
+            <div className="of-embed-card-title">Live preview</div>
             <div className="of-embed-browser">
-              {/* Faux browser chrome */}
               <div className="of-embed-browser-bar">
                 {["#ef4444","#f59e0b","#34e29b"].map((c) => (
                   <span key={c} className="of-embed-browser-dot" style={{ background: c }} />
                 ))}
                 <span className="of-embed-browser-url">yourwebsite.com</span>
               </div>
-              {/* Live widget iframe */}
-              <iframe
-                key={widgetSrc}
-                src={widgetSrc}
-                style={{
-                  position: "absolute", top: 36, left: 0, right: 0, bottom: 0,
-                  width: "100%", height: "calc(100% - 36px)",
-                  border: "none",
-                }}
-                title="Widget preview"
-              />
+              {widgetSrc ? (
+                <iframe key={widgetSrc} src={widgetSrc} title="Widget preview"
+                  style={{ position: "absolute", top: 36, left: 0, right: 0, bottom: 0,
+                    width: "100%", height: "calc(100% - 36px)", border: "none" }} />
+              ) : (
+                <div style={{ position: "absolute", inset: 36, display: "flex",
+                  alignItems: "center", justifyContent: "center", color: "var(--ink-3)",
+                  fontSize: 13 }}>Loading…</div>
+              )}
             </div>
-          ) : (
-            <div className="of-placeholder" style={{ flex: 1, minHeight: 200 }}>
-              <div className="ring"><Icon name="code" /></div>
-              <p>Preview will appear here</p>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* ── Snippet block ──────────────────────────────────────────────────── */}
-      <div className="of-embed-snippet-wrap">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <span className="of-field-lbl" style={{ marginBottom: 0 }}>Embed snippet</span>
-          <button
-            className="of-btn-solid"
-            style={{ gap: 7, fontSize: 12.5, padding: "7px 16px" }}
-            onClick={onCopy}
-          >
+      {/* ── Snippet block ────────────────────────────────────────────────── */}
+      <div className="of-embed-snippet-section">
+        <div className="of-embed-snippet-header">
+          <div>
+            <div className="of-embed-card-title" style={{ marginBottom: 2 }}>Embed snippet</div>
+            <div style={{ fontSize: 12, color: "var(--ink-3)" }}>
+              Paste this before <code style={{ fontFamily: "var(--font-m)", fontSize: 11, background: "rgba(255,255,255,.06)", borderRadius: 4, padding: "1px 6px" }}>&lt;/body&gt;</code> on your website
+            </div>
+          </div>
+          <button className="of-embed-copy-btn" onClick={onCopy}
+            style={{ borderColor: copied ? "var(--good)" : "rgba(255,255,255,.12)",
+              color: copied ? "var(--good)" : "var(--ink-1)" }}>
             <Icon name={copied ? "check" : "copy"} />
             {copied ? "Copied!" : "Copy snippet"}
           </button>
         </div>
         <pre className="of-snippet-pre">
-          {snippet || "Configure your widget above to generate the snippet."}
+          {snippet || "// Configure your widget above to generate the snippet."}
         </pre>
       </div>
+
     </div>
   );
 }
