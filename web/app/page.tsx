@@ -1227,13 +1227,12 @@ export default function CommandCenter() {
                     )}
                   </div>
 
-                </div>
 
-                {/* ── Saved chunks list — grouped by source ───────────── */}
-                <div className="of-kb-divider" />
-                <div className="of-kb-section-lbl">
-                  Saved knowledge ({kbChunks.length} chunk{kbChunks.length !== 1 ? "s" : ""})
-                </div>
+                  {/* ── Saved chunks list — grouped by source ───────────── */}
+                  <div className="of-kb-divider" />
+                  <div className="of-kb-section-lbl">
+                    Saved knowledge ({kbChunks.length} chunk{kbChunks.length !== 1 ? "s" : ""})
+                  </div>
                 {kbLoading && <div style={{ opacity: 0.5, fontSize: 13, padding: "8px 0" }}>Loading…</div>}
                 {!kbLoading && kbChunks.length === 0 && (
                   <div style={{ opacity: 0.4, fontSize: 13, padding: "8px 0" }}>No knowledge saved yet.</div>
@@ -1284,6 +1283,7 @@ export default function CommandCenter() {
                   );
                 })()}
 
+                </div>
               </div>
             </div>
           )}

@@ -35,6 +35,7 @@ async function runReport(job: {
   delivery: string;
   delivery_target: string | null;
   description: string;
+  run_once: boolean;
 }) {
   console.log(`[cron/run] running: ${job.name}`);
 
@@ -89,6 +90,12 @@ Return only the SQL string, no explanation.`,
   });
 
   console.log(`[cron/run] delivered: ${job.name}`);
+
+  // Auto-delete one-shot jobs after successful delivery
+  if (job.run_once) {
+    await supabase.from("cron_jobs").delete().eq("id", job.id);
+    console.log(`[cron/run] deleted one-shot job: ${job.name}`);
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -99,7 +106,7 @@ export async function GET(req: NextRequest) {
 
   const { data: jobs, error } = await supabase
     .from("cron_jobs")
-    .select("id, account_id, name, cron_expression, report_type, delivery, delivery_target, description, last_run_at");
+    .select("id, account_id, name, cron_expression, report_type, delivery, delivery_target, description, last_run_at, run_once");
 
   if (error) {
     console.error("[cron/run] failed to fetch jobs:", error.message);

@@ -14,19 +14,27 @@ const connection = {
 
 const reportQueue = new Queue("reports", { connection });
 
-const SYSTEM_PROMPT = `You are AgentOS's Cron Scheduler.
+const BASE_PROMPT = `You are AgentOS's Cron Scheduler.
 Convert the user's natural-language schedule request into a structured cron job config.
 cron_expression must be standard 5-part cron syntax (e.g., "0 9 * * *" for 9 AM daily).
 report_type must be one of: hot_leads, sentiment_summary, interaction_count, custom.
-delivery must be one of: email, webhook, in_app.`;
+delivery must be one of: email, webhook, in_app.
+
+run_once: Set to true ONLY if the user clearly wants the report to run a single time
+(e.g. "after 10 minutes", "in 2 hours", "just once", "one time", "right now").
+For "after X minutes/hours", calculate the cron expression based on the current UTC time.
+For recurring requests ("every day", "every 2 hours", "daily at 9am"), set run_once to false.`;
 
 export async function POST(req: NextRequest) {
   const { prompt, accountId = "demo" } = await req.json();
 
+  // Build prompt at request time so the UTC timestamp is accurate
+  const system = `${BASE_PROMPT}\n\nCurrent UTC time for reference: ${new Date().toUTCString()}`;
+
   const { object: cronJob } = await generateObject({
     model: anthropic("claude-haiku-4-5-20251001"),
     schema: CronJobSchema,
-    system: SYSTEM_PROMPT,
+    system,
     prompt,
   });
 
@@ -39,6 +47,7 @@ export async function POST(req: NextRequest) {
     delivery:        cronJob.delivery,
     delivery_target: cronJob.delivery_target ?? null,
     description:     cronJob.description,
+    run_once:        cronJob.run_once ?? false,
   });
 
   // Also add to BullMQ for actual execution

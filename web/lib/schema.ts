@@ -91,6 +91,7 @@ export const CronJobSchema = z.object({
   delivery_target: z.string().optional(),
   sql_query: z.string().optional(),
   description: z.string(),
+  run_once: z.boolean().default(false),  // if true, job auto-deletes after first successful run
 });
 
 export type CronJob = z.infer<typeof CronJobSchema>;
