@@ -1078,7 +1078,7 @@ export default function CommandCenter() {
 
                 </div>
 
-                {/* ── Saved chunks list ───────────────────────────────── */}
+                {/* ── Saved chunks list — grouped by source ───────────── */}
                 <div className="of-kb-divider" />
                 <div className="of-kb-section-lbl">
                   Saved knowledge ({kbChunks.length} chunk{kbChunks.length !== 1 ? "s" : ""})
@@ -1087,37 +1087,51 @@ export default function CommandCenter() {
                 {!kbLoading && kbChunks.length === 0 && (
                   <div style={{ opacity: 0.4, fontSize: 13, padding: "8px 0" }}>No knowledge saved yet.</div>
                 )}
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
-                  {kbChunks.map((chunk) => (
-                    <div key={chunk.id} style={{
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      borderRadius: 10,
-                      padding: "10px 14px",
-                      display: "flex",
-                      gap: 10,
-                      alignItems: "flex-start",
-                    }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {chunk.source && (
-                          <div style={{ fontSize: 11, opacity: 0.5, marginBottom: 4 }}>
-                            <Icon name="file" /> {chunk.source}
+                {!kbLoading && (() => {
+                  // Group by source, preserving insertion order (API returns newest-first,
+                  // so reverse first so chunks within each group are in document order)
+                  const groups = new Map<string, typeof kbChunks>();
+                  [...kbChunks].reverse().forEach((c) => {
+                    const key = c.source ?? "manual";
+                    if (!groups.has(key)) groups.set(key, []);
+                    groups.get(key)!.push(c);
+                  });
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+                      {[...groups.entries()].map(([source, chunks]) => (
+                        <div key={source} style={{
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          borderRadius: 10,
+                          overflow: "hidden",
+                        }}>
+                          {/* Source header */}
+                          <div style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            padding: "8px 14px",
+                            borderBottom: "1px solid rgba(255,255,255,0.06)",
+                            background: "rgba(255,255,255,0.03)",
+                          }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, opacity: 0.6 }}>
+                              <Icon name="file" /> {source} <span style={{ opacity: 0.5 }}>· {chunks.length} chunk{chunks.length !== 1 ? "s" : ""}</span>
+                            </div>
+                            <button
+                              onClick={() => Promise.all(chunks.map((c) => handleDeleteKbChunk(c.id)))}
+                              style={{ background: "none", border: "none", cursor: "pointer", opacity: 0.4, color: "var(--bad, #f55)", padding: 4, fontSize: 11 }}
+                              title="Delete all chunks from this source"
+                            >
+                              <Icon name="x" /> Remove
+                            </button>
                           </div>
-                        )}
-                        <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                          {chunk.content.length > 200 ? chunk.content.slice(0, 200) + "…" : chunk.content}
+                          {/* Joined content */}
+                          <div style={{ padding: "12px 14px", fontSize: 13, lineHeight: 1.6, opacity: 0.8, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 220, overflowY: "auto" }}>
+                            {chunks.map((c) => c.content).join(" ")}
+                          </div>
                         </div>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteKbChunk(chunk.id)}
-                        style={{ background: "none", border: "none", cursor: "pointer", opacity: 0.4, color: "var(--bad, #f55)", padding: 4, flexShrink: 0 }}
-                        title="Delete chunk"
-                      >
-                        <Icon name="x" />
-                      </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
 
               </div>
             </div>
