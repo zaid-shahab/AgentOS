@@ -379,7 +379,7 @@ export default function CommandCenter() {
     setMessages((m) => [...m, { role: "user", content: q }]);
     setInsightInput("");
 
-    const isCron = /every|daily|weekly|at \d|each morning|each evening/i.test(q);
+    const isCron = /every|daily|weekly|at \d|each morning|each evening|remind|reminder|in \d+ min|in \d+ hour|after \d+ min|after \d+ hour|schedule|once a/i.test(q);
     if (isCron) {
       try {
         const res = await fetch("/api/cron", {
