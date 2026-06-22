@@ -153,10 +153,12 @@ export default function CommandCenter() {
   const [kbUploadMsg, setKbUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const kbFileRef = useRef<HTMLInputElement>(null);
   // ── Website crawl state ────────────────────────────────────────────────────
-  const [crawlUrl,    setCrawlUrl]    = useState("");
-  const [crawlBusy,   setCrawlBusy]  = useState(false);
-  const [crawlMsg,    setCrawlMsg]   = useState<{ ok: boolean; text: string } | null>(null);
-  const [crawledDomains, setCrawledDomains] = useState<string[]>([]);
+  const [crawlUrl,        setCrawlUrl]        = useState("");
+  const [crawlExtraUrls,  setCrawlExtraUrls]  = useState("");   // newline-separated extra pages
+  const [showExtraUrls,   setShowExtraUrls]   = useState(false);
+  const [crawlBusy,       setCrawlBusy]       = useState(false);
+  const [crawlMsg,        setCrawlMsg]        = useState<{ ok: boolean; text: string } | null>(null);
+  const [crawledDomains,  setCrawledDomains]  = useState<string[]>([]);
   // ── Embed widget configurator ──────────────────────────────────────────
   const [widgetBotName, setWidgetBotName]   = useState("Assistant");
   const [widgetColor,   setWidgetColor]     = useState("#22d3ee");
@@ -437,11 +439,18 @@ export default function CommandCenter() {
     if (!crawlUrl.trim() || crawlBusy) return;
     setCrawlBusy(true);
     setCrawlMsg(null);
+
+    // Parse extra URLs — one per line, ignore blanks
+    const extraUrls = crawlExtraUrls
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
     try {
       const res = await fetch("/api/crawl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: crawlUrl.trim(), accountId: "demo", replace: true }),
+        body: JSON.stringify({ url: crawlUrl.trim(), extraUrls, accountId: "demo", replace: true }),
       });
       const data = await res.json();
       if (data.success) {
@@ -1045,6 +1054,33 @@ export default function CommandCenter() {
                         : <><Icon name="search" />Crawl</>}
                     </button>
                   </div>
+
+                  {/* Extra pages toggle */}
+                  <button
+                    className="of-kb-extra-toggle"
+                    onClick={() => setShowExtraUrls((v) => !v)}
+                    disabled={crawlBusy}
+                  >
+                    <Icon name={showExtraUrls ? "chevron" : "plus"} />
+                    {showExtraUrls ? "Hide" : "Add specific pages"} — force-crawl URLs not linked in the site nav
+                  </button>
+
+                  {showExtraUrls && (
+                    <div className="of-kb-extra-wrap">
+                      <div className="of-kb-extra-hint">
+                        One URL per line — same domain only. Use this for pages hidden behind JavaScript menus
+                        (e.g. <code>/services/</code>, <code>/digital-connects/</code>, <code>/pricing/</code>).
+                      </div>
+                      <textarea
+                        className="of-kb-extra-textarea"
+                        value={crawlExtraUrls}
+                        onChange={(e) => setCrawlExtraUrls(e.target.value)}
+                        placeholder={"https://yourwebsite.com/services/\nhttps://yourwebsite.com/pricing/\nhttps://yourwebsite.com/about/"}
+                        rows={4}
+                        disabled={crawlBusy}
+                      />
+                    </div>
+                  )}
 
                   {/* Crawl status */}
                   {crawlMsg && (

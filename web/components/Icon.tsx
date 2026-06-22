@@ -6,7 +6,7 @@ type IconName =
   | "instagram" | "messenger" | "branch" | "message" | "messageCircle" | "userplus" | "shield"
   | "clock" | "mail" | "sparkles" | "search" | "activity" | "check"
   | "x" | "play" | "bot" | "chevron" | "zap" | "download" | "image"
-  | "tag" | "bell" | "slash" | "book" | "upload" | "file" | "code" | "copy" | "externalLink";
+  | "tag" | "bell" | "slash" | "book" | "upload" | "file" | "code" | "copy" | "externalLink" | "plus";
 
 type SvgProps = SVGProps<SVGSVGElement>;
 const baseProps = (extra: SvgProps = {}): SvgProps => ({
@@ -194,6 +194,9 @@ const ICONS: Record<IconName, (p: SvgProps) => JSX.Element> = {
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
       <path d="M15 3h6v6" /><path d="M10 14 21 3" />
     </svg>
+  ),
+  plus: (p) => (
+    <svg {...baseProps(p)}><path d="M12 5v14" /><path d="M5 12h14" /></svg>
   ),
 };
 

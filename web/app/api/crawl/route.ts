@@ -155,7 +155,9 @@ async function fetchPage(url: string): Promise<string | null> {
 
 // ── POST /api/crawl ───────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const { url, accountId = "demo", replace = true } = await req.json();
+  // `extraUrls` — additional seed pages to force-crawl even if not linked
+  // (useful when JS nav menus hide links from cheerio)
+  const { url, extraUrls = [], accountId = "demo", replace = true } = await req.json();
   if (!url) return NextResponse.json({ error: "url is required" }, { status: 400 });
 
   let startUrl: URL;
@@ -167,6 +169,15 @@ export async function POST(req: NextRequest) {
 
   const origin = startUrl.origin;
 
+  // Parse + validate extra seed URLs (must be same domain)
+  const extraSeeds: string[] = [];
+  for (const raw of extraUrls as string[]) {
+    try {
+      const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+      if (u.origin === origin) extraSeeds.push(normalise(u.toString()));
+    } catch { /* skip invalid */ }
+  }
+
   // 1. Delete existing chunks from this domain ────────────────────────────────
   if (replace) {
     await supabase
@@ -176,9 +187,14 @@ export async function POST(req: NextRequest) {
       .like("source", `${origin}%`);
   }
 
-  // 2. BFS crawl ─────────────────────────────────────────────────────────────
+  // 2. BFS crawl — seed with root URL + any extra pages the user specified ───
   type QueueItem = { url: string; depth: number };
-  const queue: QueueItem[]  = [{ url: normalise(startUrl.toString()), depth: 0 }];
+  const queue: QueueItem[] = [
+    { url: normalise(startUrl.toString()), depth: 0 },
+    // Extra seeds go in at depth 0 so they're always crawled even if
+    // they aren't reachable from the homepage via static HTML links
+    ...extraSeeds.map((u) => ({ url: u, depth: 0 })),
+  ];
   const visited = new Set<string>();
   const allText: { url: string; text: string }[] = [];
 
