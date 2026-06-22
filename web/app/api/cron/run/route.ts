@@ -9,18 +9,20 @@ Table: interactions
   id, account_id, platform, sender_id, message, sentiment, intent_tag, action_taken, created_at
 `;
 
-// Returns true if the cron expression was due in the last 6 minutes
-// and hasn't been run since that scheduled time.
-// 6-minute window covers GitHub Actions ~5-min polling cadence + jitter.
-function isDue(cronExpression: string, lastRunAt: string | null): boolean {
+// Returns true if a job should run now.
+// run_once jobs: fire any time after the scheduled time with no expiry window —
+//   they auto-delete after running so there is no double-fire risk, and missing
+//   the tight window (e.g. GitHub Actions fires late) would lose the job forever.
+// Recurring jobs: 10-minute window covers GitHub Actions ~5-min cadence + jitter.
+function isDue(cronExpression: string, lastRunAt: string | null, runOnce: boolean): boolean {
   try {
     const now = new Date();
     const interval = parseExpression(cronExpression, { utc: true, currentDate: now });
     const prevTime = interval.prev().toDate();
-    const windowMs = 6 * 60 * 1000;
-    const withinWindow = now.getTime() - prevTime.getTime() < windowMs;
     const notYetRun = !lastRunAt || new Date(lastRunAt) < prevTime;
-    return withinWindow && notYetRun;
+    if (runOnce) return notYetRun; // no window — fire whenever we next check after the scheduled time
+    const windowMs = 10 * 60 * 1000;
+    return now.getTime() - prevTime.getTime() < windowMs && notYetRun;
   } catch {
     return false;
   }
@@ -124,7 +126,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const due = (jobs ?? []).filter((j) => isDue(j.cron_expression, j.last_run_at));
+  const due = (jobs ?? []).filter((j) => isDue(j.cron_expression, j.last_run_at, !!j.run_once));
 
   console.log(`[cron/run] ${jobs?.length ?? 0} jobs total, ${due.length} due`);
 
