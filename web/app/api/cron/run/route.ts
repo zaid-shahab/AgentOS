@@ -48,10 +48,15 @@ async function runReport(job: {
   // Generate SQL for the report
   const { text: sql } = await generateText({
     model: anthropic("claude-haiku-4-5-20251001"),
-    system: `Generate a read-only SQL query for: "${job.description}"
+    system: `Generate a read-only SQL SELECT query.
+Report goal: "${job.description}"
 Table schema:${DB_SCHEMA}
-Filter by account_id = '${job.account_id}'.
-Return only the SQL string, no explanation.`,
+Always filter by account_id = '${job.account_id}'.
+Rules:
+- For counts/summaries, use aggregate functions: SELECT COUNT(*) as count FROM ...
+- Never SELECT a column alongside an aggregate unless it is also in GROUP BY
+- Keep the query simple — prefer COUNT(*) over selecting raw rows
+- Return only the raw SQL string, no markdown, no backticks, no explanation`,
     prompt: job.report_type,
   });
 
@@ -59,6 +64,12 @@ Return only the SQL string, no explanation.`,
 
   if (error) {
     console.error(`[cron/run] SQL error for ${job.name}:`, error.message);
+    await supabase.from("notifications").insert({
+      account_id: job.account_id,
+      title: `${job.name} — failed`,
+      body: `SQL error: ${error.message}`,
+    });
+    if (job.run_once) await supabase.from("cron_jobs").delete().eq("id", job.id);
     return;
   }
 
