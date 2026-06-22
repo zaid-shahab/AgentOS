@@ -76,11 +76,29 @@ Rules:
   }
 
   // Summarise results
-  const { text: report } = await generateText({
+  const { text: summary } = await generateText({
     model: anthropic("claude-haiku-4-5-20251001"),
-    system: "Summarize this data in plain English as a concise briefing. Max 3 sentences.",
+    system: "Summarize this data in 1-2 sentences as a concise briefing.",
     prompt: JSON.stringify(data),
   });
+
+  // Build ASCII table when data has rows
+  const rows = (data ?? []) as Record<string, unknown>[];
+  let tableText = "";
+  if (rows.length > 0) {
+    const headers = Object.keys(rows[0]);
+    const widths = headers.map((h) =>
+      Math.max(h.length, ...rows.map((r) => String(r[h] ?? "").length))
+    );
+    const divider = widths.map((w) => "-".repeat(w + 2)).join("+");
+    const headerRow = headers.map((h, i) => ` ${h.padEnd(widths[i])} `).join("|");
+    const dataRows = rows
+      .map((r) => headers.map((h, i) => ` ${String(r[h] ?? "").padEnd(widths[i])} `).join("|"))
+      .join("\n");
+    tableText = `${headerRow}\n${divider}\n${dataRows}`;
+  }
+
+  const report = rows.length > 0 ? `${summary}\n\n${tableText}` : summary;
 
   // Deliver via webhook if configured
   if (job.delivery === "webhook" && job.delivery_target) {

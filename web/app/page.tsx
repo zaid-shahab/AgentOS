@@ -209,8 +209,20 @@ export default function CommandCenter() {
     } catch {}
   }, []);
 
-  // Fetch notifications on mount and when panel opens
+  // Poll notifications every 30s so badge updates without reload
   useEffect(() => {
+    const load = () =>
+      fetch("/api/notifications?accountId=demo")
+        .then((r) => r.json())
+        .then((d) => setNotifications(d.notifications ?? []));
+    load();
+    const id = setInterval(load, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Also refresh immediately when panel opens
+  useEffect(() => {
+    if (!notifOpen) return;
     fetch("/api/notifications?accountId=demo")
       .then((r) => r.json())
       .then((d) => setNotifications(d.notifications ?? []));
@@ -632,6 +644,8 @@ export default function CommandCenter() {
                       <div style={{
                         fontSize: 12, opacity: 0.6, marginTop: 6, lineHeight: 1.55,
                         paddingLeft: unread ? 15 : 0,
+                        whiteSpace: "pre-wrap",
+                        fontFamily: n.body.includes("|") ? "var(--font-mono, monospace)" : "inherit",
                       }}>
                         {n.body}
                       </div>
