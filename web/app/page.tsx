@@ -157,8 +157,9 @@ export default function CommandCenter() {
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const kbFileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<{ stop(): void } | null>(null);
+  const recognitionRef = useRef<{ stop(): void; start(): void } | null>(null);
   const voiceTargetRef = useRef<"architect" | "insights" | null>(null);
+  const voiceStopRef = useRef(false); // true = user manually stopped, false = auto-restart on end
 
   // Preload the latest saved config on mount so the canvas isn't empty after a restart.
   useEffect(() => {
@@ -330,9 +331,11 @@ export default function CommandCenter() {
   function handleVoice(target: "architect" | "insights" | "node") {
     // Already recording? Stop and let the user send manually.
     if (recognitionRef.current) {
+      voiceStopRef.current = true;
       try { recognitionRef.current.stop(); } catch {}
       return;
     }
+    voiceStopRef.current = false;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -368,12 +371,17 @@ export default function CommandCenter() {
     };
 
     recognition.onerror = (e: any) => {
-      // Ignore "no-speech" so a pause doesn't kill the session — just keep listening.
+      // no-speech = just a pause, onend will auto-restart; aborted = we called stop()
       if (e.error === "no-speech" || e.error === "aborted") return;
       console.warn("Speech recognition error:", e.error);
+      voiceStopRef.current = true; // stop restarting on unknown errors
     };
 
     recognition.onend = () => {
+      // Auto-restart unless the user manually clicked stop or an unrecoverable error occurred
+      if (!voiceStopRef.current && recognitionRef.current) {
+        try { recognition.start(); return; } catch {}
+      }
       setRecording(false);
       recognitionRef.current = null;
       voiceTargetRef.current = null;
